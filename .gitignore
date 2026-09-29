@@ -1,0 +1,19 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+# Never commit private financial documents or local app data
+*.pdf
+!tests/fixtures/**/*.synthetic.pdf
+*.sqlite
+*.db
+*.db-*
+*.hormiga-backup
+private/
+secrets/
+.e2e-userdata/
