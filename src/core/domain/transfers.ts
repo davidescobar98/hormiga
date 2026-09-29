@@ -19,7 +19,7 @@ const CP_PREFIX = /^(DE|A|PARA|ORDENANTE|BENEFICIARIO|DESTINATARIO|ENVIADO|RECIB
 const MAX_CP_WORDS = 6;
 
 /**
- * Name of the other side of a transfer as printed by the bank, normalized ("DAVID ESCOBAR GARCIA").
+ * Name of the other side of a transfer as printed by the bank, normalized ("ANA GARCIA LOPEZ").
  * Taken from the detail after " · " (BBVA and most banks print the beneficiary/payer there). Bizum details are
  * concepts ("Enviado: cena"), not names, so they have no counterparty.
  */

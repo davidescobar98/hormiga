@@ -373,7 +373,7 @@ export const LIFE_GOAL_LABELS: Record<LifeGoal, string> = {
 };
 
 export interface FinancialProfile {
-  /** Names as they appear in bank transfers ("DAVID ESCOBAR…"): transfers to/from them are between your own accounts. */
+  /** Names as they appear in bank transfers ("ANA GARCIA…"): transfers to/from them are between your own accounts. */
   ownerNames: string[];
   household: Household | null;
   /** Partner's name as it appears in transfers/Bizum: those movements count as shared household spending. */
