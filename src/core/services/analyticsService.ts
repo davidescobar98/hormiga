@@ -1,5 +1,6 @@
 import { formatBp, ratioBp, type Cents } from '../../shared/money';
 import { buildSavingsInsights } from '../domain/savingsInsights';
+import { splitLoanPayments } from '../domain/loanSplit';
 import {
   addMonths, firstDayOfMonth, lastDayOfMonth, monthOf, monthRange, todayIso, type IsoDate, type YearMonth,
 } from '../../shared/dates';
@@ -43,6 +44,32 @@ export class AnalyticsService {
       .map((r) => r.m);
   }
 
+  /**
+   * Principal part of loan payments between two dates (matched against the loans registered in «Patrimonio»).
+   * Empty when the user prefers to count the whole payment as spending.
+   */
+  private principalAdjustments(from: IsoDate, to: IsoDate): { month: YearMonth; categoryId: number; kind: CategoryKind; merchantId: number | null; recurring: boolean; cents: Cents }[] {
+    if (!this.repos.settings.getSettings().principalAsSavings) return [];
+    const loans = this.repos.assets
+      .list()
+      .filter((a) => a.mode === 'loan' && a.principalCents && a.termMonths && a.startDate && a.annualRateBp !== null)
+      .map((a) => ({ name: a.name, terms: { principalCents: a.principalCents!, annualRateBp: a.annualRateBp!, termMonths: a.termMonths!, startDate: a.startDate! } }));
+    if (!loans.length) return [];
+    const rows = this.repos.db.all<{ id: number; date: string; cents: number; category_id: number; kind: CategoryKind; merchant_id: number | null; recurring: number }>(
+      `SELECT t.id, t.date, -t.amount_cents AS cents, t.category_id, c.kind, t.merchant_id,
+              CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END AS recurring
+       FROM transactions t JOIN categories c ON c.id = t.category_id
+       LEFT JOIN recurring_expenses r ON r.merchant_id = t.merchant_id AND r.status <> 'dismissed'
+       WHERE t.is_excluded = 0 AND c.excluded_from_spending = 0 AND t.type = 'expense' AND t.amount_cents < 0 AND t.date >= ? AND t.date <= ?
+         AND (c.system_key = 'loans' OR (' ' || t.description_normalized || ' ') LIKE '% PRESTAMO %' OR (' ' || t.description_normalized || ' ') LIKE '% HIPOTECA %')`,
+      from, to,
+    );
+    const split = splitLoanPayments(rows.map((r) => ({ id: r.id, date: r.date, amountCents: Number(r.cents) })), loans);
+    return rows
+      .filter((r) => split.has(r.id))
+      .map((r) => ({ month: r.date.slice(0, 7), categoryId: r.category_id, kind: r.kind, merchantId: r.merchant_id, recurring: r.recurring === 1, cents: split.get(r.id)!.principalCents }));
+  }
+
   private load(from: YearMonth, to: YearMonth): Dataset {
     const months = monthRange(from, to);
     const rows = this.repos.db.all<{ month: string; category_id: number; kind: CategoryKind; recurring: number; gross: number; refunds: number; n: number }>(
@@ -78,6 +105,9 @@ export class AnalyticsService {
         )
         .map((r) => [r.month, Number(r.n)] as const),
     );
+    const principal = this.principalAdjustments(firstDayOfMonth(from), lastDayOfMonth(to));
+    // Principal repaid is not spending: it enters as a reduction of the loan category (like a refund).
+    for (const p of principal) agg.push({ month: p.month, categoryId: p.categoryId, kind: p.kind, recurring: p.recurring, grossCents: 0, refundsCents: p.cents, txCount: 0 });
     const aggregates = aggregateMonths(agg, income, months);
     for (const [m, a] of aggregates) a.txCount = counts.get(m) ?? 0;
 
@@ -85,12 +115,17 @@ export class AnalyticsService {
     const incomeEntries = this.repos.income.list();
     const summaries = new Map<YearMonth, MonthSummary>();
     for (const [m, a] of aggregates) {
-      summaries.set(m, buildMonthSummary(a, { incomeMode: settings.incomeMode, incomeEntries, goal: this.repos.goals.forMonth(m) }));
+      const s = buildMonthSummary(a, { incomeMode: settings.incomeMode, incomeEntries, goal: this.repos.goals.forMonth(m) });
+      s.principalRepaidCents = principal.filter((p) => p.month === m).reduce((t, p) => t + p.cents, 0);
+      // Shown apart from real refunds: gross − refunds − principal = spending.
+      s.refundsCents -= s.principalRepaidCents;
+      summaries.set(m, s);
     }
     return { months, aggregates, summaries };
   }
 
   private categoryBreakdown(from: IsoDate, to: IsoDate, totalSpending: Cents): CategoryBreakdown[] {
+    const adj = this.principalAdjustments(from, to);
     return this.repos.db
       .all<{ id: number; name: string; color: string; kind: CategoryKind; net: number; n: number }>(
         `SELECT c.id, c.name, c.color, c.kind, -SUM(t.amount_cents) AS net, COUNT(*) AS n
@@ -99,13 +134,15 @@ export class AnalyticsService {
          GROUP BY c.id ORDER BY net DESC`,
         from, to,
       )
-      .map((r) => ({
-        categoryId: r.id, name: r.name, color: r.color, kind: r.kind, spentCents: Number(r.net),
-        shareBp: ratioBp(Number(r.net), totalSpending), txCount: Number(r.n),
-      }));
+      .map((r) => {
+        const net = Number(r.net) - adj.filter((p) => p.categoryId === r.id).reduce((t, p) => t + p.cents, 0);
+        return { categoryId: r.id, name: r.name, color: r.color, kind: r.kind, spentCents: net, shareBp: ratioBp(net, totalSpending), txCount: Number(r.n) };
+      })
+      .sort((a, b) => b.spentCents - a.spentCents);
   }
 
   private merchantBreakdown(from: IsoDate, to: IsoDate, limit: number): MerchantBreakdown[] {
+    const adj = this.principalAdjustments(from, to);
     return this.repos.db
       .all<{ id: number; name: string; category: string; net: number; n: number }>(
         `SELECT m.id, m.display_name AS name,
@@ -116,7 +153,11 @@ export class AnalyticsService {
          GROUP BY m.id HAVING net > 0 ORDER BY net DESC LIMIT ?`,
         from, to, limit,
       )
-      .map((r) => ({ merchantId: r.id, name: r.name, categoryName: r.category, spentCents: Number(r.net), txCount: Number(r.n) }));
+      .map((r) => ({
+        merchantId: r.id, name: r.name, categoryName: r.category, txCount: Number(r.n),
+        spentCents: Number(r.net) - adj.filter((p) => p.merchantId === r.id).reduce((t, p) => t + p.cents, 0),
+      }))
+      .sort((a, b) => b.spentCents - a.spentCents);
   }
 
   private categoryMonthly(from: YearMonth, to: YearMonth): Map<YearMonth, Map<number, Cents>> {
@@ -132,6 +173,10 @@ export class AnalyticsService {
       const m = map.get(r.month) ?? new Map<number, Cents>();
       m.set(r.category_id, Number(r.net));
       map.set(r.month, m);
+    }
+    for (const p of this.principalAdjustments(firstDayOfMonth(from), lastDayOfMonth(to))) {
+      const m = map.get(p.month);
+      if (m?.has(p.categoryId)) m.set(p.categoryId, m.get(p.categoryId)! - p.cents);
     }
     return map;
   }
@@ -369,7 +414,7 @@ export class AnalyticsService {
       range,
       months,
       monthsWithData: monthsN,
-      totals: { incomeCents: income, spendingCents: spending, savingsCents: income - spending, savingsRateBp: ratioBp(income - spending, income), refundsCents: sum((s) => s.refundsCents) },
+      totals: { incomeCents: income, spendingCents: spending, savingsCents: income - spending, savingsRateBp: ratioBp(income - spending, income), refundsCents: sum((s) => s.refundsCents), principalRepaidCents: sum((s) => s.principalRepaidCents) },
       categories,
       merchants: this.merchantBreakdown(from, to, 10),
       categoryTrends: top.map((c) => ({

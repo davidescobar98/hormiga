@@ -62,7 +62,7 @@ export function AnalyticsPage() {
         <>
           <div className="grid grid-4">
             <Card><div className="stat-card"><span className="stat-label">Ingresos</span><span className="stat-value"><Money cents={r.totals.incomeCents} /></span></div></Card>
-            <Card><div className="stat-card"><span className="stat-label">Gasto</span><span className="stat-value"><Money cents={r.totals.spendingCents} /></span>{r.totals.refundsCents > 0 && <span className="stat-sub">Neto de {formatCents(r.totals.refundsCents)} en devoluciones</span>}</div></Card>
+            <Card><div className="stat-card"><span className="stat-label">Gasto</span><span className="stat-value"><Money cents={r.totals.spendingCents} /></span>{r.totals.refundsCents > 0 && <span className="stat-sub">Neto de {formatCents(r.totals.refundsCents)} en devoluciones</span>}{r.totals.principalRepaidCents > 0 && <span className="stat-sub">Sin {formatCents(r.totals.principalRepaidCents)} de capital de préstamos amortizado (reduce tu deuda)</span>}</div></Card>
             <Card><div className="stat-card"><span className="stat-label">Ahorro</span><span className="stat-value">{r.totals.incomeCents > 0 ? <Money cents={r.totals.savingsCents} /> : '—'}</span></div></Card>
             <Card><div className="stat-card"><span className="stat-label">Tasa de ahorro</span><span className="stat-value num">{formatBp(r.totals.savingsRateBp, 0)}</span></div></Card>
           </div>

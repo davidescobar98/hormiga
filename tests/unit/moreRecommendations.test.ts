@@ -7,7 +7,7 @@ import type { MonthSummary, RecurringDTO } from '../../src/shared/types';
 const summary = (month: string, income: number, spending: number, goal: 'above' | 'below' | null = null): MonthSummary => ({
   month, incomeCents: income, incomeSource: '', grossExpensesCents: spending, refundsCents: 0, spendingCents: spending, savingsCents: income - spending,
   savingsRateBp: income > 0 ? Math.round(((income - spending) * 10000) / income) : null, fixedCents: 0, variableCents: spending, discretionaryCents: 0,
-  txCount: 10, hasData: true, goal: goal ? { targetCents: 30000, differenceCents: 0, progressBp: 10000, status: goal, description: '' } : null,
+  txCount: 10, hasData: true, principalRepaidCents: 0, goal: goal ? { targetCents: 30000, differenceCents: 0, progressBp: 10000, status: goal, description: '' } : null,
 });
 const sub = (name: string, monthly: number, extra: Partial<RecurringDTO> = {}): RecurringDTO => ({
   id: 1, merchantId: name.length, merchantName: name, categoryId: 1, categoryName: 'Suscripciones', status: 'confirmed', frequency: 'monthly', kind: 'subscription',

@@ -33,6 +33,7 @@ const settingsPatch = z.object({
   lastSeenVersion: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/).nullable(),
   notifications: z.object({ enabled: z.boolean() }).strict(),
   syncIntervalHours: z.number().int().min(0).max(48),
+  principalAsSavings: z.boolean(),
   profile: z.object({
     ownerNames: z.array(z.string().trim().min(3).max(80)).max(5),
     household: z.enum(HOUSEHOLDS).nullable(),

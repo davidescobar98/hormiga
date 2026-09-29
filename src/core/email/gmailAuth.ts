@@ -57,6 +57,12 @@ export class GmailAuth {
     this.client = null;
   }
 
+  /** Gmail credentials saved on disk that this Windows session cannot decrypt anymore. */
+  async unreadableSecrets(): Promise<boolean> {
+    if (!this.vault.unreadable) return false;
+    return (await this.vault.unreadable(SECRET_CLIENT)) || (await this.vault.unreadable(SECRET_TOKENS));
+  }
+
   async hasTokens(): Promise<boolean> {
     return !!(await this.vault.get(SECRET_TOKENS));
   }

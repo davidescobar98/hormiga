@@ -356,6 +356,8 @@ export interface AppSettings {
   /** While the app is open, look for new statements in Gmail every N hours (0 = only when opening). */
   syncIntervalHours: number;
   lock: { enabled: boolean; windowsHello: boolean; autoLockMinutes: number };
+  /** Count the principal part of loan payments as savings (debt repaid) instead of spending. */
+  principalAsSavings: boolean;
 }
 
 export interface LockStatus {
@@ -471,6 +473,8 @@ export interface MonthSummary {
   txCount: number;
   hasData: boolean;
   goal: GoalStatus | null;
+  /** Principal of loan payments this month: reduces debt, so it is not counted as spending (setting). */
+  principalRepaidCents: Cents;
 }
 
 export interface CategoryBreakdown {
@@ -597,7 +601,7 @@ export interface AnalyticsReport {
   range: AnalyticsRange;
   months: MonthSummary[];
   monthsWithData: number;
-  totals: { incomeCents: Cents; spendingCents: Cents; savingsCents: Cents; savingsRateBp: number | null; refundsCents: Cents };
+  totals: { incomeCents: Cents; spendingCents: Cents; savingsCents: Cents; savingsRateBp: number | null; refundsCents: Cents; principalRepaidCents: Cents };
   categories: CategoryBreakdown[];
   merchants: MerchantBreakdown[];
   categoryTrends: { categoryId: number; name: string; color: string; series: { month: YearMonth; cents: Cents }[] }[];

@@ -140,6 +140,7 @@ export function buildMonthSummary(
     txCount: agg.txCount,
     hasData,
     goal: target !== null && hasData ? goalStatus(savings, target) : null,
+    principalRepaidCents: 0,
   };
 }
 

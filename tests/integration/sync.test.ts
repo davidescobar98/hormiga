@@ -131,3 +131,13 @@ describe('email sync (mocked Gmail API)', () => {
     expect(core.repos.transactions.count()).toBeGreaterThan(0);
   });
 });
+
+describe('gmail credentials that cannot be decrypted', () => {
+  it('explains the problem instead of silently looking "not configured"', async () => {
+    const core = makeCore();
+    core.vault.unreadable = async (name: string) => name === 'gmail.client';
+    const s = await core.sync.status();
+    expect(s.state).toBe('not_configured');
+    expect(s.message).toMatch(/Windows no permite descifrarla/);
+  });
+});

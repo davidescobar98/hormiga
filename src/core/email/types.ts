@@ -42,4 +42,6 @@ export interface SecretVault {
   get(name: string): Promise<string | null>;
   set(name: string, value: string): Promise<void>;
   delete(name: string): Promise<void>;
+  /** True when the secret exists on disk but cannot be decrypted (e.g. Windows' encryption key changed). */
+  unreadable?(name: string): Promise<boolean>;
 }

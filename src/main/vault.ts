@@ -39,6 +39,22 @@ export class SafeStorageVault implements SecretVault {
     await rename(tmp, this.file(name));
   }
 
+  async unreadable(name: string): Promise<boolean> {
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(this.file(name));
+    } catch {
+      return false;
+    }
+    if (!this.isAvailable()) return true;
+    try {
+      safeStorage.decryptString(bytes);
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
   async delete(name: string): Promise<void> {
     await rm(this.file(name), { force: true });
   }

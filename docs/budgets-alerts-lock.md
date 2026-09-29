@@ -50,3 +50,7 @@ abrir). Usa la misma búsqueda incremental de solo lectura.
 - **Movimientos extraordinarios** (≥ 10.000 € que siguen contando como gasto o ingreso): se listan en «Análisis» y
   «Ahorro» para marcarlos con un clic como patrimonio (compra de vivienda o coche, venta, préstamo) o confirmar que son
   un gasto/ingreso real. Los impuestos y gastos de una compra sí son gasto.
+
+## Cuota de préstamos: intereses y capital (0.4.2) — `src/core/domain/loanSplit.ts`
+
+Cada cargo de préstamo (categoría Préstamos o concepto con «préstamo»/«hipoteca») se empareja con la fila de su cuadro de amortización (préstamo registrado en «Patrimonio») por fecha (±35 días, fila no usada más cercana) e importe (±5 %). La parte de capital deja de contar como gasto (entra como reducción de la categoría, igual que una devolución) y se muestra aparte («capital amortizado»); los intereses siguen siendo gasto. Ajustes → Objetivo de ahorro permite contar la cuota completa como gasto.

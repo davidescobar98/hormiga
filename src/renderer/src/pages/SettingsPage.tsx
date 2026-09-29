@@ -107,7 +107,13 @@ export function SettingsPage({ initialSection }: { initialSection?: string }) {
       </section>
 
       <section ref={(el) => { refs.current.goal = el; }}>
-        <Card title="Objetivo de ahorro"><GoalEditor /></Card>
+        <Card title="Objetivo de ahorro">
+          <GoalEditor />
+          <label className="check" style={{ marginTop: 12 }}>
+            <input type="checkbox" checked={s.principalAsSavings} onChange={(e) => update({ principalAsSavings: e.target.checked })} />
+            Contar el capital que amortizas de tus préstamos como ahorro, no como gasto (solo los intereses son gasto). Necesita el préstamo registrado en «Patrimonio» con su cuadro de amortización.
+          </label>
+        </Card>
       </section>
 
       <section ref={(el) => { refs.current.security = el; }}>

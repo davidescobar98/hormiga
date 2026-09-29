@@ -14,6 +14,8 @@ export interface EmailAuthPort {
   authorize(): Promise<void>;
   disconnect(): Promise<void>;
   resetClient(): void;
+  /** Optional: saved credentials exist but cannot be decrypted. */
+  unreadableSecrets?(): Promise<boolean>;
 }
 
 const PROVIDER = 'gmail';
@@ -38,11 +40,18 @@ export class SyncService {
     private readonly emit: (e: SyncProgressEvent) => void = () => {},
   ) {}
 
+  private warnedUnreadable = false;
+
   async status(): Promise<EmailStatus> {
     const client = await this.auth.clientConfig();
     const tokens = client ? await this.auth.hasTokens() : false;
     const authError = this.repos.settings.getRaw<string>('email.authError');
     const state: EmailStatus['state'] = !client ? 'not_configured' : !tokens ? 'disconnected' : authError ? 'reauth_required' : 'connected';
+    const unreadable = state !== 'connected' && ((await this.auth.unreadableSecrets?.()) ?? false);
+    if (unreadable && !this.warnedUnreadable) {
+      this.warnedUnreadable = true;
+      this.log.warn('gmail.secrets_unreadable');
+    }
     const last = this.repos.settings.getLastSync();
     return {
       state,
@@ -53,7 +62,9 @@ export class SyncService {
       lastSyncAt: last?.finishedAt ?? null,
       lastSync: last,
       lastDocument: this.repos.documents.lastImported(),
-      message: state === 'reauth_required' ? authError : null,
+      message: unreadable
+        ? 'No se ha podido leer la conexión con Gmail guardada en este equipo (Windows no permite descifrarla). Vuelve a configurarla: pega tu ID y secreto de cliente y autoriza de nuevo. Tus datos no se han perdido.'
+        : state === 'reauth_required' ? authError : null,
     };
   }
 
@@ -188,6 +199,12 @@ export class SyncService {
         }
         const toImport = detected.filter((i) => !processed.has(i.meta.id) || processed.get(i.meta.id) === 'failed');
         summary.pendingCandidates = pendingNew.filter((i) => i.score.classification === 'possible').length;
+        const seen = new Set(items.map((i) => i.meta.id));
+        for (const [id, status] of processed) {
+          if (status !== 'failed' || seen.has(id)) continue;
+          const meta = await provider.getMessage(id);
+          toImport.push({ meta, score: scoreMessage(meta, settings.detection) });
+        }
         for (let i = 0; i < toImport.length; i++) {
           this.emit({ phase: 'processing', current: i + 1, total: toImport.length, message: `Procesando documento ${i + 1} de ${toImport.length}` });
           await this.processMessage(provider, toImport[i]!.meta, toImport[i]!.score.score, summary);

@@ -47,6 +47,7 @@ export function SavingsPage() {
               <span className="stat-label">Ahorro de {formatMonth(s.month)}</span>
               <span className="hero-figure num">{s.summary.incomeCents > 0 ? formatCents(s.summary.savingsCents) : '—'}</span>
               <span className="muted small">{formatCents(s.summary.incomeCents)} de ingresos − {formatCents(s.summary.spendingCents)} de gasto</span>
+              {s.summary.principalRepaidCents > 0 && <span className="muted small">Además has amortizado {formatCents(s.summary.principalRepaidCents)} de capital de tu préstamo: no es gasto, reduce tu deuda.</span>}
               {s.goalStatus && (
                 <div className="row">
                   <Badge tone={s.goalStatus.status === 'below' ? 'warning' : 'positive'}>

@@ -7,6 +7,15 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '0.4.2',
+    date: '2026-09-30',
+    items: [
+      'La cuota de tus préstamos se separa en intereses (gasto) y capital amortizado (reduce tu deuda, cuenta como ahorro), usando el préstamo registrado en «Patrimonio». Se puede desactivar en Ajustes.',
+      'Si Windows no puede leer la conexión con Gmail guardada, Hormiga ahora lo avisa y te indica cómo volver a conectarla (antes la sincronización dejaba de funcionar sin decir nada).',
+      'Los extractos marcados para reintentar se vuelven a descargar aunque sean antiguos.',
+    ],
+  },
+  {
     version: '0.4.1',
     date: '2026-09-30',
     items: [

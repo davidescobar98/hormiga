@@ -6,6 +6,7 @@ import type { MarketProvider } from '../../src/core/market/yahoo';
 
 export class MemoryVault implements SecretVault {
   readonly data = new Map<string, string>();
+  unreadable?: (name: string) => Promise<boolean>;
   isAvailable() {
     return true;
   }

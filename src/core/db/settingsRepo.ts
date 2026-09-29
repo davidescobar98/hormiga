@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifications: { enabled: false },
   syncIntervalHours: 6,
   lock: { enabled: false, windowsHello: false, autoLockMinutes: 15 },
+  principalAsSavings: true,
 };
 
 /** Non-secret key/value settings stored as JSON. Secrets (OAuth tokens) never go here. */
