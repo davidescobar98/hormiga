@@ -914,6 +914,8 @@ export interface CounterpartySummary {
   categoryId: number | null;
   /** Not reviewed and with a large transfer: currently assumed to be one of your own accounts. */
   needsReview: boolean;
+  /** Companies (S.L., S.A.…) can pay or charge you but are never your own account. */
+  isCompany: boolean;
 }
 
 export interface CounterpartyDecisionInput {

@@ -24,7 +24,12 @@ export const CAPITAL = K([
 /** Transfers and Bizum with other people: spending (out) or money received (in) unless they turn out to be yours. */
 export const PERSON_TRANSFER = K(['TRANSFERENCIA', 'TRANSFERENCIAS', 'TRANSF', 'TRANSFER', 'BIZUM', 'ENVIO DE DINERO', 'ORDEN DE PAGO']);
 /** Incoming transfer from a company (payroll, expenses paid by the employer…). */
-const COMPANY = K(['S L', 'S L U', 'SL', 'SLU', 'S A', 'S A U', 'SA', 'SAU']);
+const COMPANY = K(['S L', 'S L U', 'SL', 'SLU', 'S A', 'S A U', 'SA', 'SAU', 'S COOP', 'SOCIEDAD LIMITADA', 'SOCIEDAD ANONIMA']);
+
+/** A company (S.L., S.A.…) can pay you or charge you, but it is never one of your own accounts. */
+export function isCompanyName(normalized: string): boolean {
+  return !!hasKeyword(normalized, COMPANY);
+}
 const INCOME = K(['NOMINA', 'SALARIO', 'PENSION', 'PRESTACION', 'ABONO NOMINA', 'SUBSIDIO', 'HONORARIOS']);
 
 export function hasKeyword(text: string, keywords: string[]): string | null {

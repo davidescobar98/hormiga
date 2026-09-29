@@ -5,14 +5,14 @@ import { addDays, lastDayOfMonth, todayIso, type IsoDate, type YearMonth } from 
 import { formatCents } from '../../shared/money';
 import { balanceAt, balanceWithInterest, type Flow } from '../domain/accounts';
 import { findKnownMerchant, normalizeText } from '../domain/merchant';
-import { CAPITAL, hasKeyword, inferTransactionType, INTERNAL_TRANSFER, PERSON_TRANSFER, type StatementKind } from '../domain/transactionType';
+import { CAPITAL, hasKeyword, inferTransactionType, INTERNAL_TRANSFER, isCompanyName, PERSON_TRANSFER, type StatementKind } from '../domain/transactionType';
 import { counterpartyKey, LARGE_TRANSFER_CENTS, matchInternalPairs, refineTransfer, type CounterpartyRole, type TransferContext, type TransferRefinement } from '../domain/transfers';
 import type { AccountRow } from '../db/accountsRepo';
 import { AppError } from '../errors';
 import type { CategorizationService } from './categorizationService';
 import type { Repos } from './context';
 
-const TRANSFER_MODEL_VERSION = 3;
+const TRANSFER_MODEL_VERSION = 4;
 
 interface TransferRow {
   id: number;
@@ -257,6 +257,9 @@ export class AccountsService {
   migrateIfNeeded(): number {
     const v = this.repos.settings.getRaw<number>('model.transfers') ?? 1;
     if (v >= TRANSFER_MODEL_VERSION) return 0;
+    // 0.4.1: companies marked as "own account" (e.g. the employer paying the salary) go back to unreviewed.
+    const wrong = this.repos.accounts.counterparties().filter((c) => c.role === 'own' && isCompanyName(c.key));
+    for (const c of wrong) this.repos.accounts.deleteCounterparty(c.key);
     const n = this.refreshCapital() + this.refreshTransfers();
     this.repos.settings.setRaw('model.transfers', TRANSFER_MODEL_VERSION);
     return n;
@@ -322,7 +325,7 @@ export class AccountsService {
       const key = counterpartyKey(r.description_raw);
       if (!key) continue;
       const g = groups.get(key) ?? {
-        key, displayName: displayName(key), sentCents: 0, receivedCents: 0, count: 0, lastDate: r.date, largestCents: 0, needsReview: false,
+        key, displayName: displayName(key), sentCents: 0, receivedCents: 0, count: 0, lastDate: r.date, largestCents: 0, needsReview: false, isCompany: false,
         role: decided.get(key)?.role ?? null, accountId: decided.get(key)?.accountId ?? null, categoryId: decided.get(key)?.categoryId ?? null,
       };
       const a = Number(r.amount_cents);
@@ -334,15 +337,21 @@ export class AccountsService {
       groups.set(key, g);
     }
     for (const d of decided.values()) {
-      if (!groups.has(d.key)) groups.set(d.key, { key: d.key, displayName: d.displayName, sentCents: 0, receivedCents: 0, count: 0, lastDate: '', largestCents: 0, role: d.role, accountId: d.accountId, categoryId: d.categoryId, needsReview: false });
+      if (!groups.has(d.key)) groups.set(d.key, { key: d.key, displayName: d.displayName, sentCents: 0, receivedCents: 0, count: 0, lastDate: '', largestCents: 0, role: d.role, accountId: d.accountId, categoryId: d.categoryId, needsReview: false, isCompany: false });
     }
-    for (const g of groups.values()) g.needsReview = g.role === null && g.largestCents >= LARGE_TRANSFER_CENTS && g.sentCents > 0;
+    for (const g of groups.values()) {
+      g.needsReview = g.role === null && g.largestCents >= LARGE_TRANSFER_CENTS && g.sentCents > 0;
+      g.isCompany = isCompanyName(g.key);
+    }
     return [...groups.values()].sort((a, b) => b.sentCents + b.receivedCents - (a.sentCents + a.receivedCents));
   }
 
   decideCounterparty(input: { key: string; displayName?: string; role: CounterpartyRole | null; accountId: number | null; categoryId: number | null }): number {
     if (input.role === null) this.repos.accounts.deleteCounterparty(input.key);
     else {
+      if (input.role === 'own' && isCompanyName(input.key)) {
+        throw new AppError('VALIDATION', 'Una empresa no puede ser una cuenta tuya. Si te paga (por ejemplo tu nómina), elige «Otra persona o empresa»: contará como ingreso.');
+      }
       if (input.role === 'own' && input.accountId !== null) this.repos.accounts.get(input.accountId);
       if (input.role === 'other' && input.categoryId !== null) this.repos.categories.get(input.categoryId);
       this.repos.accounts.setCounterparty({ key: input.key, displayName: input.displayName ?? displayName(input.key), role: input.role, accountId: input.accountId, categoryId: input.categoryId });

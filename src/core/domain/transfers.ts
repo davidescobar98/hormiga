@@ -2,7 +2,7 @@ import type { TransactionType } from '../../shared/types';
 import { daysBetween, type IsoDate } from '../../shared/dates';
 import type { Cents } from '../../shared/money';
 import { normalizeText } from './merchant';
-import { hasKeyword, INTERNAL_TRANSFER, PERSON_TRANSFER } from './transactionType';
+import { hasKeyword, INTERNAL_TRANSFER, isCompanyName, PERSON_TRANSFER } from './transactionType';
 
 /*
  * Transfers between people and between your own accounts.
@@ -75,7 +75,9 @@ export function refineTransfer(descriptionRaw: string, descriptionNormalized: st
   const isTransferish = hasKeyword(descriptionNormalized, PERSON_TRANSFER) || hasKeyword(descriptionNormalized, INTERNAL_TRANSFER);
   if (!isTransferish || amountCents === 0) return null;
   const key = counterpartyKey(descriptionRaw);
-  const decision = key ? ctx.decisions.get(key) : undefined;
+  const found = key ? ctx.decisions.get(key) : undefined;
+  // Safety net: a company is never "your own account" (e.g. your employer paying your salary by transfer).
+  const decision = found?.role === 'own' && key && isCompanyName(key) ? undefined : found;
   const out = amountCents < 0;
 
   // Moved to one of your savings accounts by concept ("traspaso", "cuenta ahorro"…): same as a transfer to your name.

@@ -283,9 +283,9 @@ function TransfersReview({ accounts, onCreateAccount }: { accounts: AccountDTO[]
     >
       <div className="stack">
         <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
-          <li><strong>Es mía</strong>: dinero movido entre tus cuentas. No es gasto ni ingreso y mantienes la liquidez (sale de un saldo y entra en otro).</li>
+          <li><strong>Es una cuenta mía</strong>: traspasos entre tus propias cuentas (por ejemplo tu cuenta remunerada). No es gasto ni ingreso y mantienes la liquidez.</li>
           <li><strong>Mi pareja</strong>: gastos compartidos del hogar.</li>
-          <li><strong>Otra persona</strong>: cuenta como gasto (o ingreso si te pagan); elige su categoría real, por ejemplo Vivienda para el alquiler.</li>
+          <li><strong>Otra persona o empresa</strong>: si le pagas, es gasto (elige su categoría real, por ejemplo Vivienda para el alquiler); si te paga (tu nómina, un cliente), es ingreso.</li>
         </ul>
         {settings.data && settings.data.profile.ownerNames.length === 0 && (
           <Callout tone="info">
@@ -319,9 +319,9 @@ function TransfersReview({ accounts, onCreateAccount }: { accounts: AccountDTO[]
                         void decide(c, role, acc, null);
                       }}>
                         <option value="">Sin revisar</option>
-                        <option value="own">Es mía</option>
-                        <option value="partner">Mi pareja</option>
-                        <option value="other">Otra persona</option>
+                        <option value="own" disabled={c.isCompany}>Es una cuenta mía{c.isCompany ? ' (no, es una empresa)' : ''}</option>
+                        <option value="partner" disabled={c.isCompany}>Mi pareja</option>
+                        <option value="other">{c.receivedCents > 0 && c.sentCents === 0 ? 'Me paga (nómina, cliente…)' : 'Otra persona o empresa'}</option>
                       </select>
                     </td>
                     <td>

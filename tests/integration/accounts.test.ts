@@ -172,3 +172,17 @@ describe('same account in two formats and email statements to retry', () => {
     expect(core.repos.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM documents')!.n).toBe(0);
   });
 });
+
+describe('employer transfers', () => {
+  it('refuses marking a company as your own account and resets such old decisions on update', async () => {
+    const core = makeCore({ now: '2026-09-30T10:00:00Z' });
+    await importA(core);
+    expect(() => core.accounts.decideCounterparty({ key: 'EMPRESA FICTICIA S L', role: 'own', accountId: null, categoryId: null })).toThrow(/Una empresa no puede ser una cuenta tuya/);
+    // A decision stored by an older version is reset by the one-time migration.
+    core.repos.accounts.setCounterparty({ key: 'EMPRESA FICTICIA S L', displayName: 'Empresa', role: 'own', accountId: null, categoryId: null });
+    core.repos.settings.setRaw('model.transfers', 3);
+    core.accounts.migrateIfNeeded();
+    expect(core.repos.accounts.counterparties().find((c) => c.key === 'EMPRESA FICTICIA S L')).toBeUndefined();
+    expect(core.accounts.counterparties().find((c) => c.key === 'PERSONA FICTICIA UNO')?.isCompany).toBe(false);
+  });
+});

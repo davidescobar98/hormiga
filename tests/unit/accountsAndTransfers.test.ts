@@ -105,3 +105,10 @@ describe('transfers to own savings by concept', () => {
     expect(refine('LIQUIDACION TARJETA CREDITO', -30000, c)).toBeNull();
   });
 });
+
+describe('companies are never your own account', () => {
+  it('a salary by transfer from a company stays income even if it was marked as "own"', () => {
+    const decisions = new Map([['EMPRESA FICTICIA S L U', { key: 'EMPRESA FICTICIA S L U', role: 'own' as const, accountId: 1, categoryId: null }]]);
+    expect(refine('Transferencia recibida · De Empresa Ficticia S.L.U.', 88800, ctx({ decisions }))).toBeNull();
+  });
+});

@@ -7,6 +7,14 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '0.4.1',
+    date: '2026-09-30',
+    items: [
+      'Corregido: una empresa (por ejemplo la que te paga la nómina por transferencia) marcada como «cuenta mía» dejaba de contar como ingreso. Esas marcas se han deshecho y ya no se permiten.',
+      'Revisión de transferencias más clara: «Es una cuenta mía», «Mi pareja» y «Otra persona o empresa» (o «Me paga» si solo te envía dinero).',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-09-30',
     items: [
