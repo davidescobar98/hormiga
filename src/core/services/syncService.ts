@@ -163,7 +163,7 @@ export class SyncService {
   }
 
   /** Incremental sync. The very first sync only scans: the user reviews the candidates before a bulk import. */
-  async syncNow(trigger: 'manual' | 'startup' = 'manual'): Promise<SyncSummary> {
+  async syncNow(trigger: 'manual' | 'startup' | 'scheduled' = 'manual'): Promise<SyncSummary> {
     return this.singleFlight(async () => {
       const summary = this.newSummary(trigger);
       const provider = await this.provider();

@@ -270,7 +270,7 @@ export type EmailConnectionState = 'not_configured' | 'disconnected' | 'connecte
 export interface SyncSummary {
   startedAt: string;
   finishedAt: string;
-  trigger: 'manual' | 'startup' | 'selection';
+  trigger: 'manual' | 'startup' | 'selection' | 'scheduled';
   scanned: number;
   detected: number;
   imported: number;
@@ -351,6 +351,31 @@ export interface AppSettings {
   autoUpdate: boolean;
   /** Optional personal context that tailors suggestions. Stored only on this computer. */
   profile: FinancialProfile;
+  /** Windows notifications for alerts (alerts are always listed inside the app). */
+  notifications: { enabled: boolean };
+  /** While the app is open, look for new statements in Gmail every N hours (0 = only when opening). */
+  syncIntervalHours: number;
+  lock: { enabled: boolean; windowsHello: boolean; autoLockMinutes: number };
+}
+
+export interface LockStatus {
+  enabled: boolean;
+  locked: boolean;
+  pinSet: boolean;
+  helloAvailable: boolean;
+  windowsHello: boolean;
+  autoLockMinutes: number;
+  retryAfterSeconds: number;
+}
+
+export interface LockConfigInput {
+  enabled?: boolean;
+  windowsHello?: boolean;
+  autoLockMinutes?: number;
+  /** New PIN (4–8 digits). */
+  pin?: string;
+  /** Required to change or remove an existing PIN, or to turn the lock off. */
+  currentPin?: string;
 }
 
 export const HOUSEHOLDS = ['single', 'couple', 'shared_flat', 'family'] as const;
@@ -718,6 +743,7 @@ export type ErrorCode =
   | 'OAUTH_CANCELLED'
   | 'OAUTH_TIMEOUT'
   | 'SECURE_STORAGE_UNAVAILABLE'
+  | 'LOCKED'
   | 'MARKET_DISABLED'
   | 'MARKET_OFFLINE'
   | 'MARKET_ERROR'
@@ -773,6 +799,48 @@ export interface PotInput {
   color: string;
 }
 
+export type BudgetStatus = 'ok' | 'at_risk' | 'warning' | 'over';
+
+export interface BudgetLine {
+  categoryId: number;
+  name: string;
+  color: string;
+  limitCents: Cents;
+  spentCents: Cents;
+  remainingCents: Cents;
+  usedBp: number;
+  /** End-of-month estimate for the current month (linear from the days elapsed). */
+  projectedCents: Cents;
+  status: BudgetStatus;
+  suggestedCents: Cents | null;
+  /** Average monthly spending of the last 3 complete months. */
+  averageCents: Cents | null;
+  daysLeft: number;
+}
+
+export interface BudgetsOverview {
+  month: YearMonth;
+  isCurrentMonth: boolean;
+  lines: BudgetLine[];
+  totalLimitCents: Cents;
+  totalSpentCents: Cents;
+  /** Categories without a budget, with a suggested amount from your history (largest spending first). */
+  suggestions: { categoryId: number; name: string; averageCents: Cents; suggestedCents: Cents; kind: CategoryKind }[];
+}
+
+export type AlertKind = 'budget' | 'unusual_charge' | 'duplicate_charge' | 'price_increase' | 'upcoming_payment' | 'transfer_review' | 'sync';
+
+export interface AlertDTO {
+  key: string;
+  kind: AlertKind;
+  title: string;
+  body: string;
+  page: string;
+  section: string | null;
+  createdAt: string;
+  read: boolean;
+}
+
 export const ACCOUNT_KINDS = ['current', 'savings', 'card', 'investment', 'other'] as const;
 export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
@@ -800,6 +868,15 @@ export interface AccountDTO {
   /** Money in / out over the last 30 days (internal transfers included). */
   last30InCents: Cents;
   last30OutCents: Cents;
+}
+
+export interface ExtraordinaryMovement {
+  id: number;
+  date: IsoDate;
+  amountCents: Cents;
+  description: string;
+  type: TransactionType;
+  categoryName: string;
 }
 
 export interface AccountUpdate {

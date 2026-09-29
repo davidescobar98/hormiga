@@ -7,6 +7,8 @@ import { SavingsHistoryChart } from '../components/charts';
 import { GoalEditor, RecommendationCard } from '../components/flows';
 import { useNavigate } from '../App';
 import { BenchmarkCard, CushionCard, MoneyFlowCard, UpcomingCard, YearCard } from '../components/SavingsInsightsView';
+import { BudgetsCard } from '../components/BudgetsCard';
+import { ExtraordinaryCard } from '../components/ExtraordinaryCard';
 
 export function SavingsPage() {
   const [month, setMonth] = useState<string | undefined>(undefined);
@@ -84,6 +86,8 @@ export function SavingsPage() {
               <button className="btn link" onClick={() => navigate('settings', { section: 'profile' })}>Completar mi perfil</button>
             </Callout>
           )}
+          <ExtraordinaryCard />
+          <section id="budgets"><BudgetsCard /></section>
           <div className="grid grid-main">
             <MoneyFlowCard insights={s.insights} />
             <BenchmarkCard insights={s.insights} />

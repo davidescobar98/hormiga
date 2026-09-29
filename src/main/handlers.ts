@@ -12,6 +12,7 @@ import { MAX_DOCUMENT_BYTES } from '../core/parsing/pdfText';
 import { SUPPORTED_EXTENSIONS } from '../core/parsing/registry';
 import type { Runtime } from './runtime';
 import type { Updater } from './updater';
+import type { AppLock } from './lock';
 
 type Handler<C extends Channel> = (input: ApiMap[C]['input']) => Promise<ApiMap[C]['output']> | ApiMap[C]['output'];
 export type Handlers = { [C in Channel]: Handler<C> };
@@ -28,7 +29,7 @@ export const CLEAR_CONFIRMATION = 'BORRAR';
 
 const cancelled = (message = 'Operación cancelada.'): FileActionResult => ({ ok: false, cancelled: true, message, path: null });
 
-export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | null, emitChanged: (reason: string) => void, updater: Updater): Handlers {
+export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | null, emitChanged: (reason: string) => void, updater: Updater, lock: AppLock, onAlertsChanged: () => void = () => {}): Handlers {
   const c = () => rt.core;
   const win = () => getWindow() ?? undefined;
   const refreshAfterDataChange = () => {
@@ -341,6 +342,46 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
     },
     'wealth.overview': () => c().wealth.wealthOverview(),
     'accounts.list': () => c().accounts.list(),
+    'budgets.overview': (input) => c().budgets.overview(input?.month),
+    'budgets.set': ({ categoryId, amountCents }) => {
+      c().budgets.set(categoryId, amountCents);
+      onAlertsChanged();
+      emitChanged('budgets');
+      return c().budgets.overview();
+    },
+    'alerts.list': () => c().budgets.alerts(),
+    'alerts.markRead': (input) => {
+      c().budgets.markRead(input?.key);
+      emitChanged('alerts');
+      return { ok: true };
+    },
+    'lock.status': () => lock.status(),
+    'lock.unlockPin': ({ pin }) => lock.unlockWithPin(pin),
+    'lock.unlockHello': () => lock.unlockWithHello(),
+    'lock.lockNow': () => {
+      lock.lock();
+      return { ok: lock.isLocked() };
+    },
+    'lock.configure': async (input) => {
+      const settings = c().repos.settings;
+      const current = settings.getSettings().lock;
+      const before = await lock.status();
+      if (input.pin) await lock.setPin(input.pin, input.currentPin);
+      if (input.enabled === false && current.enabled) {
+        // Turning the lock off requires the PIN (and removes it).
+        await lock.removePin(input.currentPin ?? '');
+      }
+      const pinSet = input.pin ? true : input.enabled === false ? false : before.pinSet;
+      if (input.enabled === true && !pinSet) throw new AppError('VALIDATION', 'Define primero un PIN de 4 a 8 cifras.');
+      settings.updateSettings({
+        lock: {
+          enabled: input.enabled ?? current.enabled,
+          windowsHello: input.windowsHello ?? (input.enabled === false ? false : current.windowsHello),
+          autoLockMinutes: input.autoLockMinutes ?? current.autoLockMinutes,
+        },
+      });
+      return lock.status();
+    },
     'accounts.update': (input) => {
       c().accounts.update(input);
       refreshAfterDataChange();
@@ -367,6 +408,12 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
       return c().accounts.list();
     },
     'accounts.counterparties': () => c().accounts.counterparties(),
+    'accounts.extraordinary': () => c().accounts.extraordinary(),
+    'accounts.resolveExtraordinary': ({ id, asCapital }) => {
+      c().accounts.resolveExtraordinary(id, asCapital);
+      refreshAfterDataChange();
+      return c().accounts.extraordinary();
+    },
     'accounts.decideCounterparty': (input) => {
       const changed = c().accounts.decideCounterparty(input);
       refreshAfterDataChange();

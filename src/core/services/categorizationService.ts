@@ -17,7 +17,7 @@ export class CategorizationService {
   alignType(type: TransactionType, amountCents: number, category: Pick<Category, 'excludedFromSpending' | 'id'>): TransactionType {
     const transfersId = this.repos.categories.idByKey('transfers');
     const incomeId = this.repos.categories.idByKey('income');
-    if (category.id === transfersId) return 'transfer';
+    if (category.id === transfersId || category.id === this.repos.categories.idByKey('capital')) return 'transfer';
     if (category.id === incomeId) return amountCents > 0 ? 'income' : type;
     if (!category.excludedFromSpending && (type === 'transfer' || type === 'income' || type === 'unknown')) return amountCents < 0 ? 'expense' : 'refund';
     return type;

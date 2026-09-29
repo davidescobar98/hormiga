@@ -269,7 +269,7 @@ export class ImportService {
         ? { categoryId: refCategory, source: 'HEURISTIC' as const, confidence: 0.9, detail: ref!.detail, ruleId: null }
         : this.categorization.classify(r.descriptionNormalized, merchant, ref?.type ?? r.type);
       const baseType = ref?.type ?? r.type;
-      const type = cat.source === 'USER' ? this.categorization.alignType(baseType, r.amountCents, this.repos.categories.get(cat.categoryId)) : baseType;
+      const type = cat.source === 'USER' || refCategory !== null ? this.categorization.alignType(baseType, r.amountCents, this.repos.categories.get(cat.categoryId)) : baseType;
       const id = this.repos.transactions.insert({
         documentId,
         fingerprint: r.fingerprint,

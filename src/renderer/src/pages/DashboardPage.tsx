@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { AlertsCard } from '../components/BudgetsCard';
 import { api, useInvalidate, useQuery } from '../api';
 import { useNavigate } from '../App';
 import { formatBp, formatCents } from '../../../shared/money';
@@ -166,6 +167,8 @@ export function DashboardPage() {
           </div>
         </div>
       </section>
+
+      <AlertsCard />
 
       <div className="grid grid-main">
         <Card title="Evolución" hint="Gasto, ingresos y ahorro por mes" actions={<MonthlyLegend showIncome={d.monthly.some((m) => m.incomeCents > 0)} />}>

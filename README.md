@@ -216,6 +216,7 @@ Más detalle en [docs/security.md](docs/security.md).
 
 ## Documentación técnica
 
+- [docs/budgets-alerts-lock.md](docs/budgets-alerts-lock.md) — presupuestos, avisos, sincronización periódica, bloqueo y operaciones patrimoniales.
 - [docs/accounts-and-transfers.md](docs/accounts-and-transfers.md) — cuentas y saldos, transferencias, perfil y ahorro ampliado.
 - [docs/architecture.md](docs/architecture.md) — capas, contrato IPC, modelo de datos.
 - [docs/email-ingestion.md](docs/email-ingestion.md) — Gmail, detección, sincronización, deduplicación.

@@ -98,9 +98,9 @@ export class Runtime {
       onDataChanged: this.events.dataChanged,
     });
     this.log.info('db.opened', { schema: this.db.schemaVersion });
-    if (!this.core.repos.settings.getRaw<boolean>('retry.bbva-pdf-v2')) {
+    if (!this.core.repos.settings.getRaw<boolean>('retry.bbva-pdf-v3')) {
       this.core.importer.retryEmailReviews(['bbva-pdf-v1']);
-      this.core.repos.settings.setRaw('retry.bbva-pdf-v2', true);
+      this.core.repos.settings.setRaw('retry.bbva-pdf-v3', true);
     }
     this.core.repos.accounts.pruneEmpty();
     const reclassified = this.core.accounts.migrateIfNeeded();

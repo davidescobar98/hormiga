@@ -22,7 +22,9 @@ export const CHANNELS = [
   'data.removeDemo', 'data.openDataDir', 'data.clearImported',
   'app.updateStatus', 'app.checkUpdates', 'app.installUpdate',
   'accounts.list', 'accounts.update', 'accounts.setBalance', 'accounts.createManual', 'accounts.merge', 'accounts.deleteManual',
-  'accounts.counterparties', 'accounts.decideCounterparty',
+  'accounts.counterparties', 'accounts.decideCounterparty', 'accounts.extraordinary', 'accounts.resolveExtraordinary',
+  'budgets.overview', 'budgets.set', 'alerts.list', 'alerts.markRead',
+  'lock.status', 'lock.unlockPin', 'lock.unlockHello', 'lock.lockNow', 'lock.configure',
   'pots.overview', 'pots.save', 'pots.delete', 'pots.movements', 'pots.addMovement', 'pots.deleteMovement',
   'wealth.overview', 'wealth.saveAsset', 'wealth.deleteAsset', 'wealth.valuations', 'wealth.saveValuation', 'wealth.deleteValuation',
   'wealth.loanSchedule', 'wealth.earlyRepayment', 'market.search', 'market.returns',
@@ -34,6 +36,9 @@ type Missing = Exclude<Channel, (typeof CHANNELS)[number]>;
 const _exhaustive: Missing extends never ? true : Missing = true;
 void _exhaustive;
 
-export const EVENTS = ['sync.progress', 'sync.finished', 'data.changed', 'update.status'] as const satisfies readonly EventName[];
+export const EVENTS = ['sync.progress', 'sync.finished', 'data.changed', 'update.status', 'lock.changed', 'app.navigate'] as const satisfies readonly EventName[];
 
 export const IPC_PREFIX = 'hormiga:';
+
+/** The only channels allowed while the app is locked (everything else is refused in the main process). */
+export const LOCK_CHANNELS: readonly string[] = ['lock.status', 'lock.unlockPin', 'lock.unlockHello', 'app.info', 'app.updateStatus', 'app.installUpdate'];

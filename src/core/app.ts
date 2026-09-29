@@ -12,6 +12,7 @@ import { RecurringService } from './services/recurringService';
 import { SyncService } from './services/syncService';
 import { WealthService } from './services/wealthService';
 import { AccountsService } from './services/accountsService';
+import { BudgetsService } from './services/budgetsService';
 import { YahooMarketProvider, type MarketProvider } from './market/yahoo';
 
 export interface CoreDeps {
@@ -41,6 +42,7 @@ export interface Core {
   gmailAuth: GmailAuth;
   wealth: WealthService;
   accounts: AccountsService;
+  budgets: BudgetsService;
 }
 
 /** Composition root of the application layer (no Electron dependencies: fully testable in Node). */
@@ -97,5 +99,7 @@ export function createCore(deps: CoreDeps): Core {
       pendingTransferReviews: accounts.counterparties().filter((c) => c.needsReview).length,
     };
   };
-  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts };
+  const budgets = new BudgetsService(repos, analytics, deps.now);
+  budgets.pendingTransferReviews = () => accounts.counterparties().filter((c) => c.needsReview).length;
+  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts, budgets };
 }

@@ -7,6 +7,20 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '0.4.0',
+    date: '2026-09-30',
+    items: [
+      'Presupuestos mensuales por categoría, con sugerencias según tus últimos meses, previsión a fin de mes y avisos al 80 % y al superarlos.',
+      'Avisos en «Resumen» (y, si quieres, notificaciones de Windows): cargos inusuales o duplicados, subidas de precio, pagos anuales próximos y transferencias por revisar.',
+      'Bloqueo con PIN o Windows Hello al abrir, al bloquear Windows o tras un tiempo sin usar el ordenador.',
+      'Búsqueda de extractos en Gmail cada pocas horas mientras Hormiga está abierta.',
+      'Nuevo lector de los extractos mensuales de cuenta de BBVA que llegan por email (validado con un extracto real).',
+      'Nueva categoría «Patrimonio y préstamos»: comprar una vivienda, recibir un préstamo o vender ya no descuadra tu ahorro.',
+      'Revisión de movimientos extraordinarios (10.000 € o más) para marcarlos como patrimonio con un clic.',
+      'Tus decisiones sobre beneficiarios («Es mía», «Mi pareja»…) se aplican también a las transferencias recibidas.',
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-09-29',
     items: [

@@ -327,6 +327,31 @@ UPDATE transactions SET account_id = (SELECT s.account_id FROM statements s WHER
 WHERE document_id IS NOT NULL;
 `,
   },
+  {
+    version: 5,
+    name: 'budgets and alerts',
+    sql: `
+-- Monthly spending limit per category (the same every month until changed).
+CREATE TABLE budgets (
+  category_id INTEGER PRIMARY KEY REFERENCES categories(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- Alerts already raised (so each one is shown/notified once).
+CREATE TABLE alerts (
+  key TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  page TEXT NOT NULL,
+  section TEXT,
+  created_at TEXT NOT NULL,
+  read_at TEXT
+);
+CREATE INDEX idx_alerts_created ON alerts(created_at);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

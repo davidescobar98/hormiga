@@ -16,6 +16,8 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { PendingPasswordPrompt } from './components/PasswordPrompt';
 import { WhatsNew } from './components/WhatsNew';
 import { UpdateBanner } from './components/UpdateBanner';
+import { LockScreen } from './components/LockScreen';
+import type { LockStatus } from '../../shared/types';
 import type { Theme } from '../../shared/types';
 
 export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'import' | 'settings';
@@ -61,26 +63,53 @@ export function App() {
   return (
     <DataVersionContext.Provider value={ctx}>
       <ToastProvider>
-        <Shell />
+        <LockGate />
       </ToastProvider>
     </DataVersionContext.Provider>
   );
 }
 
-function Shell() {
+let lastPlace: { page: PageId; params: NavParams } = { page: 'dashboard', params: {} };
+
+/** Asks the main process whether the app is locked before loading any data. */
+function LockGate() {
+  const [status, setStatus] = useState<LockStatus | null>(null);
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void api('lock.status').then((s) => alive && setStatus(s)).catch(() => alive && setStatus(null));
+    const off = window.hormiga.on('lock.changed', (s) => setStatus(s));
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+  if (!status) return <Loading label="Abriendo Hormiga…" />;
+  if (status.locked) return <LockScreen status={status} onUnlocked={(s) => { setStatus(s); setGeneration((g) => g + 1); }} />;
+  // Remount after unlocking so every screen reloads its data.
+  return <Shell key={generation} lockEnabled={status.enabled} />;
+}
+
+function Shell({ lockEnabled }: { lockEnabled: boolean }) {
   const settings = useQuery(() => api('settings.get'), []);
-  const [page, setPage] = useState<PageId>('dashboard');
-  const [params, setParams] = useState<NavParams>({});
+  // Restored after unlocking (the shell remounts to reload every screen).
+  const [page, setPage] = useState<PageId>(lastPlace.page);
+  const [params, setParams] = useState<NavParams>(lastPlace.params);
   const navigate = useCallback((p: PageId, prm: NavParams = {}) => {
     setPage(p);
     setParams(prm);
+    lastPlace = { page: p, params: prm };
     document.querySelector('.main')?.scrollTo({ top: 0 });
+    if (prm.section) setTimeout(() => document.getElementById(prm.section!)?.scrollIntoView({ block: 'start' }), 300);
   }, []);
   const toast = useToast();
 
   useEffect(() => {
     if (settings.data) applyTheme(settings.data.theme);
   }, [settings.data]);
+
+  // Clicking a Windows notification opens the related page.
+  useEffect(() => window.hormiga.on('app.navigate', (n) => navigate(n.page as PageId, n.section ? { section: n.section } : {})), [navigate]);
 
   useEffect(
     () =>
@@ -99,7 +128,7 @@ function Shell() {
   return (
     <NavContext.Provider value={navigate}>
       <div className="app">
-        <Sidebar page={page} onNavigate={navigate} />
+        <Sidebar page={page} onNavigate={navigate} lockEnabled={lockEnabled} />
         <main className="main" id="main">
           <UpdateBanner />
           {page === 'dashboard' && <DashboardPage />}
@@ -121,7 +150,7 @@ function Shell() {
   );
 }
 
-function Sidebar({ page, onNavigate }: { page: PageId; onNavigate: (p: PageId) => void }) {
+function Sidebar({ page, onNavigate, lockEnabled }: { page: PageId; onNavigate: (p: PageId) => void; lockEnabled: boolean }) {
   const review = useQuery(() => api('import.reviewSummary'), []);
   const email = useQuery(() => api('email.status'), []);
   const lastSync = email.data?.lastSyncAt ? new Date(email.data.lastSyncAt) : null;
@@ -144,6 +173,7 @@ function Sidebar({ page, onNavigate }: { page: PageId; onNavigate: (p: PageId) =
         </button>
       ))}
       <div className="sidebar-footer">
+        {lockEnabled && <button className="btn sm ghost" onClick={() => void api('lock.lockNow')}><Icon name="lock" size={15} /> Bloquear</button>}
         <div className="privacy-note">
           <Icon name="lock" size={15} />
           <span>Tus datos se guardan solo en este equipo.</span>

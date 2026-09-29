@@ -1,16 +1,18 @@
-import type { AccountDTO, AccountKind, CounterpartySummary, TransactionType } from '../../shared/types';
+import type { AccountDTO, AccountKind, CounterpartySummary, ExtraordinaryMovement, TransactionType } from '../../shared/types';
+
+export const EXTRAORDINARY_CENTS = 1000000;
 import { addDays, lastDayOfMonth, todayIso, type IsoDate, type YearMonth } from '../../shared/dates';
 import { formatCents } from '../../shared/money';
 import { balanceAt, balanceWithInterest, type Flow } from '../domain/accounts';
 import { findKnownMerchant, normalizeText } from '../domain/merchant';
-import { hasKeyword, inferTransactionType, INTERNAL_TRANSFER, PERSON_TRANSFER, type StatementKind } from '../domain/transactionType';
+import { CAPITAL, hasKeyword, inferTransactionType, INTERNAL_TRANSFER, PERSON_TRANSFER, type StatementKind } from '../domain/transactionType';
 import { counterpartyKey, LARGE_TRANSFER_CENTS, matchInternalPairs, refineTransfer, type CounterpartyRole, type TransferContext, type TransferRefinement } from '../domain/transfers';
 import type { AccountRow } from '../db/accountsRepo';
 import { AppError } from '../errors';
 import type { CategorizationService } from './categorizationService';
 import type { Repos } from './context';
 
-const TRANSFER_MODEL_VERSION = 2;
+const TRANSFER_MODEL_VERSION = 3;
 
 interface TransferRow {
   id: number;
@@ -202,8 +204,8 @@ export class AccountsService {
         if (!transferish && r.transfer_match_id === null && r.counter_account_id === null) continue;
         const base = inferTransactionType(r.description_normalized, amount, r.statement_kind ?? 'account');
         const ref = refineTransfer(r.description_raw, r.description_normalized, amount, ctx);
-        const type = ref?.type ?? base.type;
         const refCategory = ref ? this.categoryFor(ref) : null;
+        const type = ref && refCategory !== null ? this.categorization.alignType(ref.type, amount, this.repos.categories.get(refCategory)) : ref?.type ?? base.type;
         if (refCategory !== null) {
           target.set(r.id, { type, categoryId: refCategory, source: 'HEURISTIC', confidence: 0.9, detail: ref!.detail, ruleId: null, counter: ref!.counterAccountId, match: null });
         } else {
@@ -255,9 +257,56 @@ export class AccountsService {
   migrateIfNeeded(): number {
     const v = this.repos.settings.getRaw<number>('model.transfers') ?? 1;
     if (v >= TRANSFER_MODEL_VERSION) return 0;
-    const n = this.refreshTransfers();
+    const n = this.refreshCapital() + this.refreshTransfers();
     this.repos.settings.setRaw('model.transfers', TRANSFER_MODEL_VERSION);
     return n;
+  }
+
+  /** Loan drawdowns and property operations (not fixed by hand) become neutral "Patrimonio y préstamos". */
+  refreshCapital(): number {
+    const capitalId = this.repos.categories.idByKey('capital');
+    let changed = 0;
+    this.repos.db.transaction(() => {
+      const rows = this.repos.db.all<{ id: number; description_normalized: string; type: TransactionType; category_id: number }>(
+        'SELECT id, description_normalized, type, category_id FROM transactions WHERE category_locked = 0',
+      );
+      for (const r of rows) {
+        const k = hasKeyword(r.description_normalized, CAPITAL);
+        if (!k || (r.type === 'transfer' && r.category_id === capitalId)) continue;
+        this.repos.transactions.setCategory(r.id, capitalId, 'HEURISTIC', 0.85, `Operación patrimonial («${k.toLowerCase()}»): préstamo, compra o venta de un bien`, null, false);
+        this.repos.db.run("UPDATE transactions SET type = 'transfer' WHERE id = ?", r.id);
+        changed++;
+      }
+    });
+    return changed;
+  }
+
+  // ───────── Extraordinary movements ─────────
+
+  /** Very large movements (≥ 10.000 €) that are still counted as spending or income: candidates to review. */
+  extraordinary(): ExtraordinaryMovement[] {
+    const confirmed = new Set(this.repos.settings.getRaw<number[]>('extraordinary.confirmed') ?? []);
+    return this.repos.db
+      .all<{ id: number; date: string; amount_cents: number; description_raw: string; type: TransactionType; category_name: string }>(
+        `SELECT t.id, t.date, t.amount_cents, t.description_raw, t.type, c.name AS category_name FROM transactions t JOIN categories c ON c.id = t.category_id
+         WHERE t.is_excluded = 0 AND ABS(t.amount_cents) >= ? AND t.type IN ('expense','income','refund','fee','cash_withdrawal') AND c.excluded_from_spending = 0
+         ORDER BY t.date DESC`,
+        EXTRAORDINARY_CENTS,
+      )
+      .filter((r) => !confirmed.has(r.id))
+      .map((r) => ({ id: r.id, date: r.date, amountCents: Number(r.amount_cents), description: r.description_raw, type: r.type, categoryName: r.category_name }));
+  }
+
+  /** "Es patrimonio" → neutral category (kept as a manual fix); "Es real" → keep it and stop asking. */
+  resolveExtraordinary(id: number, asCapital: boolean): void {
+    if (asCapital) {
+      const capitalId = this.repos.categories.idByKey('capital');
+      this.repos.transactions.setCategory(id, capitalId, 'USER', 1, 'Marcado por ti como operación patrimonial', null, true);
+      this.repos.db.run("UPDATE transactions SET type = 'transfer' WHERE id = ?", id);
+    } else {
+      const list = this.repos.settings.getRaw<number[]>('extraordinary.confirmed') ?? [];
+      this.repos.settings.setRaw('extraordinary.confirmed', [...new Set([...list, id])]);
+    }
   }
 
   // ───────── Counterparties ─────────

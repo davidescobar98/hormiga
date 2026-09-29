@@ -6,6 +6,7 @@ import { formatBp, formatCents } from '../../../shared/money';
 import type { Averages } from '../../../shared/types';
 import { Callout, capitalize, Card, EmptyState, ErrorBox, Loading, Money, Segmented } from '../components/ui';
 import { CategoryBars, MonthlyChart, MonthlyLegend, TrendLines } from '../components/charts';
+import { ExtraordinaryCard } from '../components/ExtraordinaryCard';
 
 type Preset = 'current' | '3' | '6' | '12' | 'custom';
 
@@ -68,6 +69,7 @@ export function AnalyticsPage() {
           {r.monthsWithData < r.months.length && (
             <Callout tone="info">Solo {r.monthsWithData} de los {r.months.length} meses del periodo tienen datos. Los meses sin extracto no se cuentan como gasto cero.</Callout>
           )}
+          <ExtraordinaryCard />
 
           <div className="grid grid-main">
             <Card title="Evolución mensual" actions={<MonthlyLegend showIncome={r.totals.incomeCents > 0} />}>

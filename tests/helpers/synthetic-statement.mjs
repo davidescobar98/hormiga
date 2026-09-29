@@ -160,3 +160,27 @@ export function sampleCardSpec(overrides = {}) {
     ...overrides,
   };
 }
+
+/**
+ * FICTITIOUS page(s) drawn exactly line by line: each line is split on double spaces into columns drawn at
+ * increasing x positions (the PDF text extractor turns column gaps back into double spaces).
+ * @param {string[][]} pages
+ */
+export async function buildLinesPdf(pages) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const size = 8;
+  for (const lines of pages) {
+    const page = doc.addPage([595, 842]);
+    let y = 800;
+    for (const line of lines) {
+      let x = 40;
+      for (const part of line.split('  ')) {
+        page.drawText(part, { x, y, size, font });
+        x += font.widthOfTextAtSize(part, size) + 30;
+      }
+      y -= 12;
+    }
+  }
+  return doc.save();
+}

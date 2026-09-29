@@ -247,6 +247,47 @@ try {
     await page.screenshot({ path: join(shots, '15-savings-plus.png'), fullPage: true });
   });
 
+  await step('budgets: suggestion from history, progress and alerts', async () => {
+    await page.getByRole('heading', { name: 'Presupuestos del mes' }).waitFor();
+    const card = page.locator('#budgets');
+    const summary = card.getByText('Sugerencias según tus últimos 3 meses');
+    if (!(await card.locator('details[open]').count())) await summary.click();
+    await card.getByRole('button', { name: /^Usar / }).first().click();
+    await card.locator('.bar-row').first().waitFor();
+    await page.screenshot({ path: join(shots, '16-budgets.png'), fullPage: true });
+  });
+
+  await step('app lock with PIN: locks, refuses a wrong PIN, unlocks', async () => {
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('heading', { name: 'Seguridad', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Activar bloqueo con PIN' }).click();
+    const d = page.getByRole('dialog');
+    await d.getByLabel('Nuevo PIN (4–8 cifras)').fill('2468');
+    await d.getByLabel('Repite el PIN').fill('2468');
+    const hello = d.getByLabel('Permitir también Windows Hello');
+    if (await hello.count()) await hello.uncheck();
+    await d.getByRole('button', { name: 'Guardar' }).click();
+    await page.getByText('Bloqueo activado.').first().waitFor();
+    await page.getByRole('button', { name: 'Bloquear ahora' }).click();
+    await page.getByRole('heading', { name: 'Hormiga está bloqueada' }).waitFor();
+    // While locked, the main process refuses data requests even if the page asks directly.
+    const probe = await page.evaluate(() => window.hormiga.invoke('transactions.list', {}).then(() => 'ok', (e) => e.code));
+    if (probe !== 'LOCKED') throw new Error(`Datos accesibles con la app bloqueada: ${probe}`);
+    await page.screenshot({ path: join(shots, '17-locked.png') });
+    await page.getByLabel('PIN').fill('1111');
+    await page.getByRole('button', { name: 'Desbloquear' }).click();
+    await page.getByText('PIN incorrecto.').waitFor();
+    await page.getByLabel('PIN').fill('2468');
+    await page.getByRole('button', { name: 'Desbloquear' }).click();
+    await page.getByRole('heading', { name: 'Ajustes' }).first().waitFor();
+    // Turn it off again for the rest of the run.
+    await page.getByRole('button', { name: 'Desactivar bloqueo' }).click();
+    const off = page.getByRole('dialog');
+    await off.getByLabel('PIN actual').fill('2468');
+    await off.getByRole('button', { name: 'Desactivar' }).click();
+    await page.getByRole('button', { name: 'Activar bloqueo con PIN' }).waitFor();
+  });
+
   await step('wealth and simulator', async () => {
     await page.getByRole('button', { name: 'Patrimonio' }).click();
     await page.getByText('Patrimonio neto').first().waitFor();

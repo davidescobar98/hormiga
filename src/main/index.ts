@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerMonitor, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { AppLock } from './lock';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { Channel, EventMap, EventName } from '../shared/api';
-import { CHANNELS, IPC_PREFIX } from '../shared/channels';
+import { CHANNELS, IPC_PREFIX, LOCK_CHANNELS } from '../shared/channels';
 import type { IpcResult } from '../shared/types';
 import { AppError, toErrorPayload } from '../core/errors';
 import { createHandlers } from './handlers';
@@ -53,7 +54,11 @@ const log = createFileLogger(paths.logFile, logLevel, isDev);
 
 let mainWindow: BrowserWindow | null = null;
 
+let lock: AppLock | null = null;
+
 function send<E extends EventName>(event: E, payload: EventMap[E]): void {
+  // While locked, only lock and update events reach the interface (no data, no email subjects).
+  if (lock?.isLocked() && event !== 'lock.changed' && event !== 'update.status') return;
   mainWindow?.webContents.send(`${IPC_PREFIX}event`, event, payload);
 }
 
@@ -82,12 +87,15 @@ function isTrustedSender(e: IpcMainInvokeEvent): boolean {
 }
 
 function registerIpc(runtime: Runtime): void {
-  const handlers = createHandlers(runtime, () => mainWindow, (reason) => send('data.changed', { reason }), updater!);
+  const handlers = createHandlers(runtime, () => mainWindow, (reason) => send('data.changed', { reason }), updater!, lock!, () => void checkAlerts(runtime));
   for (const channel of CHANNELS) {
     ipcMain.handle(`${IPC_PREFIX}${channel}`, async (event, raw: unknown): Promise<IpcResult<unknown>> => {
       if (!isTrustedSender(event)) {
         log.warn('ipc.untrusted_sender', { channel });
         return { ok: false, error: { code: 'VALIDATION', message: 'Origen no autorizado.' } };
+      }
+      if (lock?.isLocked() && !LOCK_CHANNELS.includes(channel)) {
+        return { ok: false, error: { code: 'LOCKED', message: 'Hormiga está bloqueada.' } };
       }
       const parsed = IPC_SCHEMAS[channel as Channel].safeParse(raw);
       if (!parsed.success) {
@@ -197,6 +205,57 @@ async function startupSync(runtime: Runtime): Promise<void> {
   } catch (err) {
     log.warn('sync.startup_failed', { code: toErrorPayload(err).code });
   }
+  await checkAlerts(runtime);
+}
+
+/** While the app is open, looks for new statements every N hours (setting), then refreshes alerts. */
+async function scheduledSync(runtime: Runtime): Promise<void> {
+  const settings = runtime.core.repos.settings.getSettings();
+  if (!settings.onboardingCompleted || settings.syncIntervalHours <= 0) return;
+  const last = runtime.core.repos.settings.getLastSync()?.finishedAt;
+  if (last && Date.now() - Date.parse(last) < settings.syncIntervalHours * 3600000) return;
+  try {
+    const status = await runtime.core.sync.status();
+    if (status.state !== 'connected') return;
+    const summary = await runtime.core.sync.syncNow('scheduled');
+    send('sync.finished', summary);
+    if (summary.imported > 0) send('data.changed', { reason: 'sync' });
+  } catch (err) {
+    log.warn('sync.scheduled_failed', { code: toErrorPayload(err).code });
+  }
+  await checkAlerts(runtime);
+}
+
+/** Stores new alerts (always visible in the app) and, if enabled, shows them as Windows notifications. */
+async function checkAlerts(runtime: Runtime): Promise<void> {
+  try {
+    const settings = runtime.core.repos.settings.getSettings();
+    if (!settings.onboardingCompleted) return;
+    const fresh = runtime.core.budgets.refreshAlerts();
+    if (!fresh.length) return;
+    send('data.changed', { reason: 'alerts' });
+    if (!settings.notifications.enabled || !Notification.isSupported()) return;
+    const locked = lock?.isLocked() ?? false;
+    const shown = fresh.slice(0, 3);
+    for (const a of shown) {
+      // When locked, notifications say nothing about your finances.
+      const n = new Notification({ title: locked ? 'Hormiga' : a.title, body: locked ? 'Tienes avisos nuevos.' : a.body, silent: false });
+      n.on('click', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+        }
+        send('app.navigate', { page: a.page, section: a.section });
+      });
+      n.show();
+    }
+    if (fresh.length > shown.length && !locked) {
+      new Notification({ title: 'Hormiga', body: `Y ${fresh.length - shown.length} avisos más en la aplicación.` }).show();
+    }
+  } catch (err) {
+    log.warn('alerts.failed', { code: toErrorPayload(err).code });
+  }
 }
 
 app.on('web-contents-created', (_e, contents) => {
@@ -235,9 +294,19 @@ app.whenReady().then(async () => {
     return;
   }
   updater = new Updater(log, (s) => send('update.status', s), () => runtime.core.repos.settings.getSettings().autoUpdate);
+  lock = new AppLock(runtime.vault, () => runtime.core.repos.settings.getSettings().lock, log, (s) => send('lock.changed', s));
+  await lock.init();
   registerIpc(runtime);
   createWindow(runtime);
   updater.start();
+  // Auto-lock: when Windows locks, and after a period without using the computer.
+  powerMonitor.on('lock-screen', () => lock?.lock());
+  setInterval(() => {
+    const minutes = runtime.core.repos.settings.getSettings().lock.autoLockMinutes;
+    if (minutes > 0 && powerMonitor.getSystemIdleTime() >= minutes * 60) lock?.lock();
+  }, 30000);
+  setInterval(() => void scheduledSync(runtime), 10 * 60000);
+  setInterval(() => void checkAlerts(runtime), 60 * 60000);
   log.info('app.started', { version: app.getVersion(), packaged: app.isPackaged });
 
   app.on('activate', () => {

@@ -86,3 +86,7 @@ Actualizaciones: electron-updater descarga el instalador de la release y comprue
 código (⚠️ Windows SmartScreen puede avisar en la primera instalación). Los datos viven en `%APPDATA%\Hormiga`, fuera de
 la carpeta del programa, y antes de cada migración de esquema se guarda una copia en `data/backups`. La versión
 portátil no se actualiza sola.
+
+## Bloqueo de la aplicación (0.4.0)
+
+PIN con hash scrypt en el almacén seguro del sistema, Windows Hello opcional, rechazo de todo el IPC de datos en el proceso principal mientras está bloqueada y notificaciones sin datos con la app bloqueada. Detalle en [budgets-alerts-lock.md](budgets-alerts-lock.md). ⚠️ No cifra la base de datos en disco.

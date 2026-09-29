@@ -438,6 +438,10 @@ export class AnalyticsService {
   moreContext: (() => Pick<MoreContext, 'profile' | 'currentAccountsCents' | 'savingsAccountsCents' | 'pots' | 'loans' | 'pendingTransferReviews' | 'emergencyPotCents' | 'recommendedEmergencyMonths' | 'recommendedEmergencyReason' | 'essentialMonthlyCents'>) | null = null;
 
   /** Recurring payments whose last charge is higher than the usual previous amount. */
+  priceChanges(): MoreContext['priceIncreases'] {
+    return this.priceIncreases();
+  }
+
   private priceIncreases(): MoreContext['priceIncreases'] {
     const active = this.activeRecurring();
     if (!active.length) return [];

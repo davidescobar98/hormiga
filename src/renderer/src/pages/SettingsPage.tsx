@@ -6,6 +6,7 @@ import { Callout, Card, Dialog, Field, Loading, Segmented, useToast } from '../c
 import { EmailConnectPanel, GoalEditor, IncomeEditor } from '../components/flows';
 import { describeUpdate, useUpdateStatus } from '../components/UpdateBanner';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { AlertsSettingsCard, SecurityCard } from '../components/SecuritySettings';
 
 const SECTIONS = [
   { id: 'profile', label: 'Tu perfil' },
@@ -13,6 +14,8 @@ const SECTIONS = [
   { id: 'bbva', label: 'Detección' },
   { id: 'income', label: 'Ingresos' },
   { id: 'goal', label: 'Ahorro' },
+  { id: 'security', label: 'Seguridad' },
+  { id: 'alerts', label: 'Avisos' },
   { id: 'privacy', label: 'Privacidad y datos' },
   { id: 'appearance', label: 'Apariencia' },
   { id: 'updates', label: 'Actualizaciones' },
@@ -105,6 +108,14 @@ export function SettingsPage({ initialSection }: { initialSection?: string }) {
 
       <section ref={(el) => { refs.current.goal = el; }}>
         <Card title="Objetivo de ahorro"><GoalEditor /></Card>
+      </section>
+
+      <section ref={(el) => { refs.current.security = el; }}>
+        <SecurityCard />
+      </section>
+
+      <section ref={(el) => { refs.current.alerts = el; }}>
+        <AlertsSettingsCard settings={s} />
       </section>
 
       <section ref={(el) => { refs.current.privacy = el; }}>

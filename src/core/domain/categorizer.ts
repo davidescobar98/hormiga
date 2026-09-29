@@ -2,7 +2,7 @@ import type { ClassificationSource, RuleMatchType, TransactionType } from '../..
 import type { SystemCategoryKey } from './categories';
 import { KEYWORD_RULES, type KnownMerchant } from './knowledge';
 import { normalizeText } from './merchant';
-import { hasKeyword, PERSON_TRANSFER } from './transactionType';
+import { CAPITAL, hasKeyword, PERSON_TRANSFER } from './transactionType';
 
 export interface UserRule {
   id: number;
@@ -88,6 +88,11 @@ export function categorize(input: CategorizationInput, ctx: CategorizationContex
       detail: rule.matchType === 'merchant' ? 'Regla creada por ti para este comercio' : `Regla creada por ti: contiene «${rule.pattern}»`,
       ruleId: rule.id,
     };
+  }
+
+  const capital = hasKeyword(input.descriptionNormalized, CAPITAL);
+  if (capital) {
+    return { categoryId: ctx.categoryIdByKey('capital'), source: 'HEURISTIC', confidence: 0.85, detail: `Operación patrimonial («${capital.toLowerCase()}»): préstamo, compra o venta de un bien`, ruleId: null };
   }
 
   const byType = TYPE_CATEGORY[input.type];

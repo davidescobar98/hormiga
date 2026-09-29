@@ -131,7 +131,7 @@ describe('accounts, balances and transfers (service level)', () => {
     db.run("INSERT INTO categories(name, kind, color, is_system, system_key, created_at) VALUES ('Transferencias', 'neutral', '#000000', 1, 'transfers', ?)", ts);
     db.run("INSERT INTO transactions(document_id, fingerprint, date, description_raw, description_normalized, amount_cents, type, category_id, classification_source, created_at, updated_at) VALUES (1, 'f', '2026-01-02', 'x', 'X', -100, 'expense', 1, 'UNKNOWN', ?, ?)", ts, ts);
     db.migrate();
-    expect(db.schemaVersion).toBe(4);
+    expect(db.schemaVersion).toBe(5);
     expect(db.get('SELECT name, bank, last4, source_kind FROM accounts')).toEqual({ name: 'BBVA · cuenta ···1234', bank: 'BBVA', last4: '1234', source_kind: 'account' });
     expect(db.get<{ account_id: number }>('SELECT account_id FROM transactions')!.account_id).toBe(1);
     expect(db.get<{ name: string }>("SELECT name FROM categories WHERE system_key = 'transfers'")!.name).toBe('Entre mis cuentas');

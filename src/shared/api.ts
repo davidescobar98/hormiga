@@ -6,6 +6,7 @@ import type {
   UpdateReviewItemInput, UpdateTransactionInput, UpdateTransactionResult, PotsOverview, PotInput, PotDTO, PotMovementDTO,
   WealthOverview, AssetInput, AssetDTO, ValuationDTO, ValuationInput, LoanScheduleRow, EarlyRepaymentDTO, MarketQuoteDTO, MarketReturnsDTO, UpdateStatus,
   AccountDTO, AccountUpdate, ManualAccountInput, CounterpartySummary, CounterpartyDecisionInput,
+  BudgetsOverview, AlertDTO, LockStatus, LockConfigInput, ExtraordinaryMovement,
 } from './types';
 import type { YearMonth } from './dates';
 
@@ -101,12 +102,23 @@ export interface ApiMap {
 
   'wealth.overview': { input: Void; output: WealthOverview };
   'accounts.list': { input: Void; output: AccountDTO[] };
+  'budgets.overview': { input: { month?: YearMonth } | Void; output: BudgetsOverview };
+  'budgets.set': { input: { categoryId: number; amountCents: number | null }; output: BudgetsOverview };
+  'alerts.list': { input: Void; output: AlertDTO[] };
+  'alerts.markRead': { input: { key?: string } | Void; output: { ok: boolean } };
+  'lock.status': { input: Void; output: LockStatus };
+  'lock.unlockPin': { input: { pin: string }; output: LockStatus };
+  'lock.unlockHello': { input: Void; output: LockStatus };
+  'lock.lockNow': { input: Void; output: { ok: boolean } };
+  'lock.configure': { input: LockConfigInput; output: LockStatus };
   'accounts.update': { input: AccountUpdate; output: AccountDTO[] };
   'accounts.setBalance': { input: { id: number; balanceCents: number; date: string }; output: AccountDTO[] };
   'accounts.createManual': { input: ManualAccountInput; output: AccountDTO[] };
   'accounts.merge': { input: { fromId: number; intoId: number }; output: AccountDTO[] };
   'accounts.deleteManual': { input: { id: number }; output: AccountDTO[] };
   'accounts.counterparties': { input: Void; output: CounterpartySummary[] };
+  'accounts.extraordinary': { input: Void; output: ExtraordinaryMovement[] };
+  'accounts.resolveExtraordinary': { input: { id: number; asCapital: boolean }; output: ExtraordinaryMovement[] };
   'accounts.decideCounterparty': { input: CounterpartyDecisionInput; output: { changed: number } };
   'wealth.saveAsset': { input: AssetInput; output: AssetDTO };
   'wealth.deleteAsset': { input: { id: number }; output: { deleted: boolean } };
@@ -132,6 +144,9 @@ export interface EventMap {
   'sync.finished': SyncSummary;
   'data.changed': { reason: string };
   'update.status': UpdateStatus;
+  'lock.changed': LockStatus;
+  /** Open a page (clicking a notification). */
+  'app.navigate': { page: string; section: string | null };
 }
 export type EventName = keyof EventMap;
 

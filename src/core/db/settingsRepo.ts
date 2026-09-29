@@ -32,6 +32,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastSeenVersion: null,
   autoUpdate: true,
   profile: DEFAULT_PROFILE,
+  notifications: { enabled: false },
+  syncIntervalHours: 6,
+  lock: { enabled: false, windowsHello: false, autoLockMinutes: 15 },
 };
 
 /** Non-secret key/value settings stored as JSON. Secrets (OAuth tokens) never go here. */
@@ -69,6 +72,8 @@ export class SettingsRepo {
       ...stored,
       detection: { ...DEFAULT_DETECTION, ...(stored.detection ?? {}) },
       profile: { ...DEFAULT_PROFILE, ...(stored.profile ?? {}) },
+      notifications: { ...DEFAULT_SETTINGS.notifications, ...(stored.notifications ?? {}) },
+      lock: { ...DEFAULT_SETTINGS.lock, ...(stored.lock ?? {}) },
     };
   }
 
@@ -79,6 +84,8 @@ export class SettingsRepo {
       ...patch,
       detection: { ...current.detection, ...(patch.detection ?? {}) },
       profile: { ...current.profile, ...(patch.profile ?? {}) },
+      notifications: { ...current.notifications, ...(patch.notifications ?? {}) },
+      lock: { ...current.lock, ...(patch.lock ?? {}) },
     };
     this.setRaw('app', next);
     return next;

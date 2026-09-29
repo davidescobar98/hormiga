@@ -1,5 +1,6 @@
 import { AppError } from '../errors';
 import { BbvaStatementParser } from './bbvaParser';
+import { BbvaAccountStatementParser } from './bbvaAccountParser';
 import { BbvaWebMovementsParser } from './bbvaWebParser';
 import { csvToDocument } from './csvParser';
 import { GenericPdfStatementParser } from './genericPdfParser';
@@ -11,6 +12,7 @@ import type { ExtractedDocument, StatementParser } from './types';
 
 export const DEFAULT_PARSERS: StatementParser[] = [
   new BbvaWebMovementsParser(),
+  new BbvaAccountStatementParser(),
   new BbvaStatementParser(),
   new Norma43Parser(),
   new BankTableParser(),

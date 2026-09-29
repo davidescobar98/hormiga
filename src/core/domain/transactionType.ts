@@ -14,8 +14,15 @@ export const INTERNAL_TRANSFER = K([
   'CUENTA DE AHORRO', 'CUENTA REMUNERADA', 'HUCHA', 'LIQUIDACION TARJETA', 'LIQUIDACION DE TARJETA', 'PAGO TARJETA CREDITO',
   'PAGO TARJETA DE CREDITO', 'CARGO TARJETA CREDITO', 'AMORTIZACION TARJETA', 'APORTACION', 'INGRESO EN EFECTIVO', 'INGRESO EFECTIVO',
 ]);
+/** Money that changes what you own rather than what you spend or earn: loan drawdowns, property deals… */
+export const CAPITAL = K([
+  'DISPOSICION DE PRESTAMO', 'DISPOSICION PRESTAMO', 'DISPOSICION DE CREDITO', 'ABONO PRESTAMO', 'ABONO DE PRESTAMO', 'FORMALIZACION PRESTAMO',
+  'FORMALIZACION DE PRESTAMO', 'FORMALIZACION HIPOTECA', 'FORMALIZACION DE HIPOTECA', 'CANCELACION HIPOTECA', 'CANCELACION DE HIPOTECA',
+  'CANCELACION PRESTAMO', 'CANCELACION DE PRESTAMO', 'COMPRAVENTA', 'ARRAS',
+]);
+
 /** Transfers and Bizum with other people: spending (out) or money received (in) unless they turn out to be yours. */
-export const PERSON_TRANSFER = K(['TRANSFERENCIA', 'TRANSF', 'TRANSFER', 'BIZUM', 'ENVIO DE DINERO', 'ORDEN DE PAGO']);
+export const PERSON_TRANSFER = K(['TRANSFERENCIA', 'TRANSFERENCIAS', 'TRANSF', 'TRANSFER', 'BIZUM', 'ENVIO DE DINERO', 'ORDEN DE PAGO']);
 /** Incoming transfer from a company (payroll, expenses paid by the employer…). */
 const COMPANY = K(['S L', 'S L U', 'SL', 'SLU', 'S A', 'S A U', 'SA', 'SAU']);
 const INCOME = K(['NOMINA', 'SALARIO', 'PENSION', 'PRESTACION', 'ABONO NOMINA', 'SUBSIDIO', 'HONORARIOS']);
@@ -39,6 +46,8 @@ export interface TypeInference {
  */
 export function inferTransactionType(descriptionNormalized: string, amountCents: number, kind: StatementKind): TypeInference {
   const t = descriptionNormalized;
+  const capital = hasKeyword(t, CAPITAL);
+  if (capital && amountCents !== 0) return { type: 'transfer', reason: `Operación patrimonial («${capital}»): no es gasto ni ingreso` };
   if (amountCents < 0) {
     // Fees first: "COMISION RET. EFECTIVO" is a fee, not a withdrawal.
     let k = hasKeyword(t, FEE);

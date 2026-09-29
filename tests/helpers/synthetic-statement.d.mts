@@ -30,3 +30,4 @@ export interface WebRow {
   split?: 'amounts' | 'conceptAndAmounts';
 }
 export function buildWebMovementsPdf(spec: { pages: WebRow[][] }): Promise<Uint8Array>;
+export function buildLinesPdf(pages: string[][]): Promise<Uint8Array>;
