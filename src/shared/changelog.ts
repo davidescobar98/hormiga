@@ -7,6 +7,21 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '0.3.0',
+    date: '2026-09-29',
+    items: [
+      'Nueva sección «Cuentas»: cada cuenta con su saldo calculado automáticamente a partir de tus movimientos.',
+      'Cuentas manuales (por ejemplo tu cuenta remunerada en otro banco): su saldo crece con cada traspaso y sus intereses.',
+      'Transferencias entre tus cuentas: no cuentan como gasto y mantienes la liquidez. Las transferencias grandes sin revisar se tratan así hasta que lo confirmes.',
+      'Bizum y transferencias a otras personas cuentan como gasto; asigna a cada beneficiario su categoría (alquiler → Vivienda) una sola vez.',
+      'Tu perfil (opcional): hogar, pareja, personas a cargo, ingresos y prioridades para adaptar las sugerencias y tu colchón recomendado.',
+      'Ahorro ampliado: adónde va tu dinero, referencia 50/30/20, tu año, colchón para imprevistos y próximos pagos.',
+      'Más sugerencias: dinero parado, subidas de precio, suscripciones solapadas, pagos anuales próximos, deudas caras…',
+      'Los adjuntos que no son extractos ya no aparecen como errores, y los extractos mensuales de BBVA en revisión se vuelven a intentar.',
+      'Los movimientos de la misma cuenta importados en dos formatos ya no se cuentan dos veces.',
+    ],
+  },
+  {
     version: '0.2.0',
     date: '2026-09-29',
     items: [

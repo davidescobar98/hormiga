@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Channel } from '../shared/api';
-import { TRANSACTION_TYPES, CATEGORY_KINDS, ASSET_TYPES } from '../shared/types';
+import { TRANSACTION_TYPES, CATEGORY_KINDS, ASSET_TYPES, ACCOUNT_KINDS, HOUSEHOLDS, HOUSINGS, INCOME_STABILITIES, LIFE_GOALS } from '../shared/types';
 
 const id = z.number().int().positive();
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Mes con formato AAAA-MM');
@@ -31,6 +31,16 @@ const settingsPatch = z.object({
   marketDataEnabled: z.boolean(),
   autoUpdate: z.boolean(),
   lastSeenVersion: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/).nullable(),
+  profile: z.object({
+    ownerNames: z.array(z.string().trim().min(3).max(80)).max(5),
+    household: z.enum(HOUSEHOLDS).nullable(),
+    partnerName: z.string().trim().max(80).nullable(),
+    dependents: z.number().int().min(0).max(20),
+    housing: z.enum(HOUSINGS).nullable(),
+    incomeStability: z.enum(INCOME_STABILITIES).nullable(),
+    priorityCategoryIds: z.array(z.number().int().positive()).max(30),
+    goals: z.array(z.enum(LIFE_GOALS)).max(LIFE_GOALS.length),
+  }).partial().strict(),
 }).partial().strict();
 
 const goal = z.object({
@@ -57,6 +67,7 @@ export const IPC_SCHEMAS: Record<Channel, z.ZodType> = {
     from: isoDate.optional(),
     to: isoDate.optional(),
     merchantId: id.optional(),
+    accountId: id.optional(),
     includeExcluded: z.boolean().optional(),
     onlyExcluded: z.boolean().optional(),
     uncategorizedOnly: z.boolean().optional(),
@@ -137,6 +148,14 @@ export const IPC_SCHEMAS: Record<Channel, z.ZodType> = {
   'data.deleteAll': z.object({ confirmation: z.string().max(40) }).strict(),
   'data.loadDemo': none,
   'data.removeDemo': none,
+  'accounts.list': none,
+  'accounts.update': z.object({ id, name: text(80).trim().min(1).optional(), kind: z.enum(ACCOUNT_KINDS).optional(), includeInNetWorth: z.boolean().optional(), annualRateBp: z.number().int().gt(-10000).lt(100000).nullable().optional(), ownTransferTarget: z.boolean().optional() }).strict(),
+  'accounts.setBalance': z.object({ id, balanceCents: cents, date: isoDate }).strict(),
+  'accounts.createManual': z.object({ name: text(80).trim().min(1), bank: text(80), kind: z.enum(ACCOUNT_KINDS), balanceCents: cents, date: isoDate, annualRateBp: z.number().int().gt(-10000).lt(100000).nullable(), ownTransferTarget: z.boolean() }).strict(),
+  'accounts.merge': z.object({ fromId: id, intoId: id }).strict(),
+  'accounts.deleteManual': z.object({ id }).strict(),
+  'accounts.counterparties': none,
+  'accounts.decideCounterparty': z.object({ key: text(200).min(1), displayName: text(120).optional(), role: z.enum(['own', 'partner', 'other']).nullable(), accountId: id.nullable(), categoryId: id.nullable() }).strict(),
   'app.updateStatus': none,
   'app.checkUpdates': none,
   'app.installUpdate': none,

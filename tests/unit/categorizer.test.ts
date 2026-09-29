@@ -33,7 +33,10 @@ describe('categorize', () => {
   it('uses type heuristics for fees, cash, transfers and income (HEURISTIC)', () => {
     expect(keyOf(run('COMISION MANTENIMIENTO CUENTA').categoryId)).toBe('fees');
     expect(keyOf(run('REINTEGRO CAJERO 1234').categoryId)).toBe('cash');
-    expect(keyOf(run('BIZUM A BAR PEPE').categoryId)).toBe('transfers');
+    expect(keyOf(run('TRASPASO A CUENTA AHORRO').categoryId)).toBe('transfers');
+    // A Bizum to a bar is restaurant spending; to a person, its own spending category.
+    expect(keyOf(run('BIZUM A BAR PEPE').categoryId)).toBe('restaurants');
+    expect(keyOf(run('BIZUM ENVIADO JUAN').categoryId)).toBe('people');
     const inc = run('ABONO NOMINA EMPRESA', [], undefined, 200000);
     expect(keyOf(inc.categoryId)).toBe('income');
     expect(inc.source).toBe('HEURISTIC');
@@ -81,6 +84,10 @@ describe('inferTransactionType', () => {
     ['REINTEGRO CAJERO', -100, 'account', 'cash_withdrawal'],
     ['TRANSFERENCIA A CUENTA AHORRO', -100, 'account', 'transfer'],
     ['LIQUIDACION TARJETA CREDITO', -100, 'account', 'transfer'],
+    ['TRANSFERENCIA REALIZADA JUAN PEREZ', -100, 'account', 'expense'],
+    ['BIZUM ENVIADO CENA', -100, 'account', 'expense'],
+    ['BIZUM RECIBIDO CENA', 100, 'account', 'refund'],
+    ['TRANSFERENCIA RECIBIDA MARIA LOPEZ', 100, 'account', 'income'],
   ] as const)('%s (%d, %s) → %s', (desc, amount, kind, expected) => {
     expect(inferTransactionType(normalizeText(desc), amount, kind).type).toBe(expected);
   });

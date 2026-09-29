@@ -263,6 +263,70 @@ ALTER TABLE assets ADD COLUMN symbol TEXT;
 ALTER TABLE assets ADD COLUMN rate_source TEXT;
 `,
   },
+  {
+    version: 4,
+    name: 'bank accounts, balances and internal transfers',
+    sql: `
+-- One row per bank account or card the movements come from. Created automatically when importing.
+CREATE TABLE accounts (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  bank TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'current' CHECK (kind IN ('current','savings','card','investment','other')),
+  -- 'account' or 'card': which statements belong here (with bank and last4).
+  -- manual: an account whose statements are not imported (e.g. a remunerated account at another bank).
+  source_kind TEXT NOT NULL DEFAULT 'account' CHECK (source_kind IN ('account','card','manual')),
+  last4 TEXT,
+  -- Known balance at the end of a day (entered by the user or printed in a statement): balances are derived from it.
+  anchor_balance_cents INTEGER,
+  anchor_date TEXT,
+  anchor_source TEXT CHECK (anchor_source IS NULL OR anchor_source IN ('user','statement')),
+  include_in_net_worth INTEGER NOT NULL DEFAULT 1 CHECK (include_in_net_worth IN (0,1)),
+  -- Remunerated accounts: annual rate (TAE) used to estimate interest on the balance.
+  annual_rate_bp INTEGER CHECK (annual_rate_bp IS NULL OR (annual_rate_bp > -10000 AND annual_rate_bp < 100000)),
+  -- Where transfers to your own name go when that account is not imported (one default).
+  own_transfer_target INTEGER NOT NULL DEFAULT 0 CHECK (own_transfer_target IN (0,1)),
+  archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0,1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+ALTER TABLE statements ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL;
+ALTER TABLE statements ADD COLUMN end_balance_cents INTEGER;
+ALTER TABLE statements ADD COLUMN end_balance_date TEXT;
+ALTER TABLE transactions ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL;
+-- Other leg of a transfer between two of the user's accounts.
+ALTER TABLE transactions ADD COLUMN transfer_match_id INTEGER;
+-- The other account of a transfer between your own accounts (imported or manual).
+ALTER TABLE transactions ADD COLUMN counter_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL;
+CREATE INDEX idx_tx_account_date ON transactions(account_id, date);
+-- Who is on the other side of your transfers, decided once by you: own account, partner or someone else.
+CREATE TABLE counterparties (
+  id INTEGER PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('own','partner','other')),
+  account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+  category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+-- Transfers now only mean money moved between your own accounts.
+UPDATE categories SET name = 'Entre mis cuentas' WHERE system_key = 'transfers' AND name = 'Transferencias'
+  AND NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Entre mis cuentas');
+
+-- Existing imports: one account per bank / kind / last digits.
+INSERT INTO accounts(name, bank, kind, source_kind, last4, include_in_net_worth, created_at, updated_at)
+SELECT bank || CASE WHEN kind = 'card' THEN ' · tarjeta' ELSE ' · cuenta' END || COALESCE(' ···' || account_hint, ''),
+       bank, CASE WHEN kind = 'card' THEN 'card' ELSE 'current' END, CASE WHEN kind = 'card' THEN 'card' ELSE 'account' END,
+       account_hint, CASE WHEN kind = 'card' THEN 0 ELSE 1 END, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+FROM statements GROUP BY bank, CASE WHEN kind = 'card' THEN 'card' ELSE 'account' END, account_hint;
+UPDATE statements SET account_id = (
+  SELECT a.id FROM accounts a WHERE a.bank = statements.bank
+    AND a.source_kind = CASE WHEN statements.kind = 'card' THEN 'card' ELSE 'account' END
+    AND COALESCE(a.last4, '') = COALESCE(statements.account_hint, ''));
+UPDATE transactions SET account_id = (SELECT s.account_id FROM statements s WHERE s.document_id = transactions.document_id)
+WHERE document_id IS NOT NULL;
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

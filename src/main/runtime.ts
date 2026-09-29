@@ -98,6 +98,16 @@ export class Runtime {
       onDataChanged: this.events.dataChanged,
     });
     this.log.info('db.opened', { schema: this.db.schemaVersion });
+    if (!this.core.repos.settings.getRaw<boolean>('retry.bbva-pdf-v2')) {
+      this.core.importer.retryEmailReviews(['bbva-pdf-v1']);
+      this.core.repos.settings.setRaw('retry.bbva-pdf-v2', true);
+    }
+    this.core.repos.accounts.pruneEmpty();
+    const reclassified = this.core.accounts.migrateIfNeeded();
+    if (reclassified > 0) {
+      this.core.recurring.detect();
+      this.log.info('transfers.reclassified', { count: reclassified });
+    }
     // A fresh install has no release notes to show; an update keeps the previous value.
     const settings = this.core.repos.settings.getSettings();
     if (!settings.onboardingCompleted && settings.lastSeenVersion !== app.getVersion()) this.core.repos.settings.updateSettings({ lastSeenVersion: app.getVersion() });

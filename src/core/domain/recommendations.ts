@@ -29,6 +29,8 @@ export interface RecommendationContext {
   feesByMonth: Map<YearMonth, { cents: Cents; count: number }>;
   goalTargetCents: Cents | null;
   uncategorizedCount: number;
+  /** Categories the user values most (profile): never suggested for cuts. */
+  protectedCategoryIds?: number[];
 }
 
 // Thresholds (documented in docs/recommendations.md).
@@ -127,7 +129,7 @@ export function generateRecommendations(ctx: RecommendationContext): Recommendat
   if (last3.length >= 2) {
     const avgSpending = Math.round(last3.reduce((a, m) => a + (ctx.summaries.get(m)?.spendingCents ?? 0), 0) / last3.length);
     const candidates = ctx.categories
-      .filter((c) => c.kind === 'discretionary' && !increased.has(c.id))
+      .filter((c) => c.kind === 'discretionary' && !increased.has(c.id) && !(ctx.protectedCategoryIds ?? []).includes(c.id))
       .map((c) => {
         const avg = Math.round(last3.reduce((a, m) => a + catValue(ctx, m, c.id), 0) / last3.length);
         const target = roundToEuros(Math.round((avg * (10000 - T.discretionaryTargetReductionBp)) / 10000), 10);
@@ -253,7 +255,7 @@ export function generateRecommendations(ctx: RecommendationContext): Recommendat
     } else {
       const gap = target - avgSavings;
       const disc = ctx.categories
-        .filter((c) => c.kind === 'discretionary')
+        .filter((c) => c.kind === 'discretionary' && !(ctx.protectedCategoryIds ?? []).includes(c.id))
         .map((c) => ({ c, avg: Math.round(months.reduce((a, m) => a + catValue(ctx, m, c.id), 0) / months.length) }))
         .filter((x) => x.avg > 0)
         .sort((a, b) => b.avg - a.avg)

@@ -14,7 +14,7 @@ const tx: TransactionDTO = {
   id: 10, documentId: 1, date: '2026-08-02', bookingDate: null, descriptionRaw: 'COMPRA TARJ. MERCADONA 1234 MADRID', descriptionNormalized: 'COMPRA TARJ MERCADONA 1234 MADRID',
   merchantId: 5, merchantName: 'Mercadona', merchantRaw: 'MERCADONA 1234 MADRID', amountCents: -4520, currency: 'EUR', type: 'expense', categoryId: 2,
   categoryName: 'Otros', categoryColor: '#a3a3a3', classificationSource: 'UNKNOWN', classificationConfidence: 0, classificationDetail: null, categoryLocked: false,
-  isExcluded: false, notes: null, recurringStatus: null, source: 'manual', createdAt: '', updatedAt: '',
+  isExcluded: false, notes: null, recurringStatus: null, source: 'manual', createdAt: '', updatedAt: '', accountId: null, accountName: null, transferMatchId: null,
 };
 
 let invoke: ReturnType<typeof vi.fn>;

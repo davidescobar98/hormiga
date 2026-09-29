@@ -5,6 +5,7 @@ import type {
   SavingsOverview, ScanResult, SyncProgressEvent, SyncSummary, TransactionDetail, TransactionPage, TransactionQuery,
   UpdateReviewItemInput, UpdateTransactionInput, UpdateTransactionResult, PotsOverview, PotInput, PotDTO, PotMovementDTO,
   WealthOverview, AssetInput, AssetDTO, ValuationDTO, ValuationInput, LoanScheduleRow, EarlyRepaymentDTO, MarketQuoteDTO, MarketReturnsDTO, UpdateStatus,
+  AccountDTO, AccountUpdate, ManualAccountInput, CounterpartySummary, CounterpartyDecisionInput,
 } from './types';
 import type { YearMonth } from './dates';
 
@@ -99,6 +100,14 @@ export interface ApiMap {
   'pots.deleteMovement': { input: { id: number }; output: { deleted: boolean } };
 
   'wealth.overview': { input: Void; output: WealthOverview };
+  'accounts.list': { input: Void; output: AccountDTO[] };
+  'accounts.update': { input: AccountUpdate; output: AccountDTO[] };
+  'accounts.setBalance': { input: { id: number; balanceCents: number; date: string }; output: AccountDTO[] };
+  'accounts.createManual': { input: ManualAccountInput; output: AccountDTO[] };
+  'accounts.merge': { input: { fromId: number; intoId: number }; output: AccountDTO[] };
+  'accounts.deleteManual': { input: { id: number }; output: AccountDTO[] };
+  'accounts.counterparties': { input: Void; output: CounterpartySummary[] };
+  'accounts.decideCounterparty': { input: CounterpartyDecisionInput; output: { changed: number } };
   'wealth.saveAsset': { input: AssetInput; output: AssetDTO };
   'wealth.deleteAsset': { input: { id: number }; output: { deleted: boolean } };
   'wealth.valuations': { input: { assetId: number }; output: ValuationDTO[] };

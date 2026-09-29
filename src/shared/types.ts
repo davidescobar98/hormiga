@@ -10,7 +10,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   expense: 'Gasto',
   income: 'Ingreso',
   refund: 'Devolución',
-  transfer: 'Transferencia',
+  transfer: 'Entre mis cuentas',
   cash_withdrawal: 'Retirada de efectivo',
   fee: 'Comisión',
   unknown: 'Desconocido',
@@ -101,6 +101,10 @@ export interface TransactionDTO {
   notes: string | null;
   recurringStatus: RecurringStatus | null;
   source: DocumentSource | null;
+  accountId: number | null;
+  accountName: string | null;
+  /** Set when the movement is one leg of a transfer between two of the user's accounts. */
+  transferMatchId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -128,6 +132,7 @@ export interface TransactionQuery {
   from?: IsoDate;
   to?: IsoDate;
   merchantId?: number;
+  accountId?: number;
   includeExcluded?: boolean;
   onlyExcluded?: boolean;
   uncategorizedOnly?: boolean;
@@ -273,6 +278,8 @@ export interface SyncSummary {
   needsReview: number;
   passwordRequired: number;
   failed: number;
+  /** Attachments that turned out not to be statements (bank notices, contracts…): not errors. */
+  ignored: number;
   newTransactions: number;
   pendingCandidates: number;
   errors: { code: ErrorCode; message: string; subject?: string }[];
@@ -342,6 +349,42 @@ export interface AppSettings {
   lastSeenVersion: string | null;
   /** Download and install new versions automatically (installed Windows app only). */
   autoUpdate: boolean;
+  /** Optional personal context that tailors suggestions. Stored only on this computer. */
+  profile: FinancialProfile;
+}
+
+export const HOUSEHOLDS = ['single', 'couple', 'shared_flat', 'family'] as const;
+export type Household = (typeof HOUSEHOLDS)[number];
+export const HOUSEHOLD_LABELS: Record<Household, string> = { single: 'Vivo solo/a', couple: 'En pareja', shared_flat: 'Piso compartido', family: 'Con mi familia (padres, hijos…)' };
+
+export const HOUSINGS = ['rent', 'mortgage', 'owned', 'family'] as const;
+export type Housing = (typeof HOUSINGS)[number];
+export const HOUSING_LABELS: Record<Housing, string> = { rent: 'Alquiler', mortgage: 'Vivienda con hipoteca', owned: 'Vivienda propia pagada', family: 'Vivo con familia / sin coste' };
+
+export const INCOME_STABILITIES = ['stable', 'variable', 'self_employed'] as const;
+export type IncomeStability = (typeof INCOME_STABILITIES)[number];
+export const INCOME_STABILITY_LABELS: Record<IncomeStability, string> = { stable: 'Nómina estable', variable: 'Ingresos variables (comisiones, temporal…)', self_employed: 'Autónomo/a' };
+
+export const LIFE_GOALS = ['emergency', 'home', 'travel', 'debt', 'retirement', 'education', 'family', 'invest'] as const;
+export type LifeGoal = (typeof LIFE_GOALS)[number];
+export const LIFE_GOAL_LABELS: Record<LifeGoal, string> = {
+  emergency: 'Tener un colchón para imprevistos', home: 'Comprar vivienda', travel: 'Viajar', debt: 'Quitarme deudas',
+  retirement: 'Jubilación', education: 'Formación / estudios', family: 'Familia / hijos', invest: 'Empezar a invertir',
+};
+
+export interface FinancialProfile {
+  /** Names as they appear in bank transfers ("DAVID ESCOBAR…"): transfers to/from them are between your own accounts. */
+  ownerNames: string[];
+  household: Household | null;
+  /** Partner's name as it appears in transfers/Bizum: those movements count as shared household spending. */
+  partnerName: string | null;
+  /** People who depend financially on you (children, relatives). */
+  dependents: number;
+  housing: Housing | null;
+  incomeStability: IncomeStability | null;
+  /** Categories you value most: suggestions will not ask you to cut them. */
+  priorityCategoryIds: number[];
+  goals: LifeGoal[];
 }
 
 export interface UpdateStatus {
@@ -582,6 +625,43 @@ export interface SavingsOverview {
   scenarios: SavingsScenario[];
   history: { month: YearMonth; savingsCents: Cents; targetCents: Cents | null; rateBp: number | null }[];
   monthsOfData: number;
+  insights: SavingsInsights;
+  /** Recommended emergency fund for the user's situation and how much of it the money in accounts covers. */
+  emergency: EmergencyInfo;
+}
+
+export interface SavingsInsights {
+  month: YearMonth;
+  /** Where the month's income went. */
+  flow: {
+    incomeCents: Cents;
+    essentialCents: Cents;
+    discretionaryCents: Cents;
+    peopleCents: Cents;
+    otherCents: Cents;
+    savingsCents: Cents;
+    /** Moved to your other accounts: still yours (liquidity), shown apart from spending. */
+    movedToOwnCents: Cents;
+  };
+  /** Shares of income for the 50/30/20 reference (needs / wants / savings), in basis points. */
+  benchmark: { needsBp: number; wantsBp: number; savingsBp: number } | null;
+  year: {
+    year: number;
+    savedCents: Cents;
+    months: number;
+    avgMonthlyCents: Cents;
+    projectedCents: Cents | null;
+    monthsWithGoal: number;
+    monthsGoalMet: number;
+    streak: number;
+    best: { month: YearMonth; cents: Cents } | null;
+    worst: { month: YearMonth; cents: Cents } | null;
+  };
+  upcoming: { name: string; date: IsoDate; amountCents: Cents; frequency: RecurringFrequency }[];
+  upcomingTotalCents: Cents;
+  nonMonthly: { name: string; annualCents: Cents; nextDate: IsoDate; frequency: RecurringFrequency }[];
+  /** Monthly amount to put aside so non-monthly payments (annual insurance, quarterly bills…) never catch you out. */
+  nonMonthlyReserveCents: Cents;
 }
 
 // ───────────────────────── Data management ─────────────────────────
@@ -693,6 +773,80 @@ export interface PotInput {
   color: string;
 }
 
+export const ACCOUNT_KINDS = ['current', 'savings', 'card', 'investment', 'other'] as const;
+export type AccountKind = (typeof ACCOUNT_KINDS)[number];
+export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
+  current: 'Cuenta corriente', savings: 'Cuenta de ahorro / remunerada', card: 'Tarjeta', investment: 'Cuenta de inversión', other: 'Otra',
+};
+
+export interface AccountDTO {
+  id: number;
+  name: string;
+  bank: string;
+  kind: AccountKind;
+  sourceKind: 'account' | 'card' | 'manual';
+  last4: string | null;
+  includeInNetWorth: boolean;
+  /** Remunerated manual accounts: TAE used to estimate interest. */
+  annualRateBp: number | null;
+  /** Receives transfers to your own name when the destination account is not imported. */
+  ownTransferTarget: boolean;
+  /** Balance today: known balance ± movements after/before it. Null until a balance is known. */
+  balanceCents: Cents | null;
+  anchor: { balanceCents: Cents; date: IsoDate; source: 'user' | 'statement' } | null;
+  movementsCount: number;
+  firstDate: IsoDate | null;
+  lastDate: IsoDate | null;
+  /** Money in / out over the last 30 days (internal transfers included). */
+  last30InCents: Cents;
+  last30OutCents: Cents;
+}
+
+export interface AccountUpdate {
+  id: number;
+  name?: string;
+  kind?: AccountKind;
+  includeInNetWorth?: boolean;
+  annualRateBp?: number | null;
+  ownTransferTarget?: boolean;
+}
+
+export interface ManualAccountInput {
+  name: string;
+  bank: string;
+  kind: AccountKind;
+  balanceCents: Cents;
+  date: IsoDate;
+  annualRateBp: number | null;
+  ownTransferTarget: boolean;
+}
+
+export type CounterpartyRole = 'own' | 'partner' | 'other';
+
+export interface CounterpartySummary {
+  /** Name as printed by the bank, normalized. */
+  key: string;
+  displayName: string;
+  sentCents: Cents;
+  receivedCents: Cents;
+  count: number;
+  largestCents: Cents;
+  lastDate: IsoDate;
+  role: CounterpartyRole | null;
+  accountId: number | null;
+  categoryId: number | null;
+  /** Not reviewed and with a large transfer: currently assumed to be one of your own accounts. */
+  needsReview: boolean;
+}
+
+export interface CounterpartyDecisionInput {
+  key: string;
+  displayName?: string;
+  role: CounterpartyRole | null;
+  accountId: number | null;
+  categoryId: number | null;
+}
+
 export interface EmergencyInfo {
   /** Average monthly essential spending (essential categories, recurring or not). */
   essentialMonthlyCents: Cents;
@@ -702,6 +856,11 @@ export interface EmergencyInfo {
   coverageTenths: number | null;
   potId: number | null;
   suggestedTargetCents: { months3: Cents; months6: Cents };
+  /** Recommended months for your situation (profile) and why. */
+  recommendedMonths: number;
+  recommendedReason: string;
+  /** Money in current/savings accounts (included in net worth), for context. */
+  liquidCents: Cents | null;
   explanation: string;
 }
 
@@ -873,4 +1032,9 @@ export interface WealthOverview {
   allocation: { type: AssetType; label: string; cents: Cents; shareBp: number | null }[];
   history: { month: YearMonth; assetsCents: Cents; liabilitiesCents: Cents; netWorthCents: Cents }[];
   potsSavedCents: Cents;
+  /** Bank accounts (imported or manual) counted in net worth, with their derived balances. */
+  accounts: AccountDTO[];
+  accountsTotalCents: Cents;
+  /** Accounts whose balance is still unknown (the user has to enter it once). */
+  accountsWithoutBalance: number;
 }

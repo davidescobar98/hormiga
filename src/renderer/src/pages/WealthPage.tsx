@@ -10,6 +10,7 @@ import {
 import { monthsToTarget, simulate } from '../../../shared/simulator';
 import { Badge, Callout, Card, Dialog, EmptyState, ErrorBox, EuroInput, Field, Loading, Money, Segmented } from '../components/ui';
 import { chartColors } from '../components/charts';
+import { useNavigate } from '../App';
 
 /** Initial value recorded together with a new asset estimated by rate. */
 interface AssetDraft extends Partial<AssetInput> {
@@ -32,6 +33,7 @@ export function WealthPage() {
   const [valuing, setValuing] = useState<AssetDTO | null>(null);
   const [loanOf, setLoanOf] = useState<AssetDTO | null>(null);
   const invalidate = useInvalidate();
+  const navigate = useNavigate();
   const w = q.data;
 
   const assets = w?.assets.filter((a) => !a.isLiability) ?? [];
@@ -54,7 +56,7 @@ export function WealthPage() {
             <div className="hero-main">
               <span className="stat-label">Patrimonio neto</span>
               <span className="hero-figure num">{formatCents(w.netWorthCents)}</span>
-              <span className="muted small">Activos − deudas a día de hoy (valores estimados incluidos).</span>
+              <span className="muted small">Cuentas + activos − deudas a día de hoy (valores estimados incluidos).</span>
             </div>
             <div className="hero-stats">
               <div className="hero-stat"><span className="stat-label">Activos</span><span className="stat-value"><Money cents={w.totalAssetsCents} /></span></div>
@@ -67,6 +69,24 @@ export function WealthPage() {
               <div className="hero-stat"><span className="stat-label">En metas de ahorro</span><span className="stat-value"><Money cents={w.potsSavedCents} /></span><span className="stat-sub">Registrado en «Metas»</span></div>
             </div>
           </section>
+
+          {w.accounts.length > 0 && (
+            <Card title="Cuentas bancarias" hint="Saldo calculado con tus movimientos" actions={<button className="btn sm" onClick={() => navigate('accounts')}>Gestionar cuentas</button>}>
+              {w.accountsWithoutBalance > 0 && (
+                <Callout tone="info">{w.accountsWithoutBalance === 1 ? 'A una cuenta le falta el saldo' : `A ${w.accountsWithoutBalance} cuentas les falta el saldo`}: indícalo en «Cuentas» para que cuente en tu patrimonio.</Callout>
+              )}
+              <table className="table">
+                <tbody>
+                  {w.accounts.map((a) => (
+                    <tr key={a.id}>
+                      <td><div className="cell-main">{a.name}</div><div className="cell-sub">{a.bank}{a.annualRateBp ? ` · ${formatBp(a.annualRateBp, 2)} TAE` : ''}</div></td>
+                      <td className="right">{a.balanceCents === null ? <span className="muted">Saldo desconocido</span> : <Money cents={a.balanceCents} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
 
           {w.assets.length === 0 ? (
             <Card>

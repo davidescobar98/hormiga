@@ -1,18 +1,25 @@
 import { formatBp, ratioBp, type Cents } from '../../shared/money';
+import { buildSavingsInsights } from '../domain/savingsInsights';
 import {
   addMonths, firstDayOfMonth, lastDayOfMonth, monthOf, monthRange, todayIso, type IsoDate, type YearMonth,
 } from '../../shared/dates';
 import type {
   AnalyticsRange, AnalyticsReport, Averages, CategoryBreakdown, CategoryKind, CategoryWithStats, Dashboard, IncomeMode,
-  MerchantBreakdown, MonthSummary, Recommendation, RecurringDTO, RecurringSummary, SavingsOverview,
+  EmergencyInfo, MerchantBreakdown, MonthSummary, Recommendation, RecurringDTO, RecurringSummary, SavingsInsights, SavingsOverview,
 } from '../../shared/types';
 import {
   aggregateMonths, averageOver, buildComparisons, buildMonthSummary, buildScenarios, compare, estimateCapacity, forecastMonth,
   goalStatus, goalTarget, manualIncomeForMonth, type CategoryMonthAgg, type MonthAggregate,
 } from '../domain/metrics';
 import { generateRecommendations, type MerchantMonthActivity } from '../domain/recommendations';
+import { generateMoreRecommendations, type MoreContext } from '../domain/moreRecommendations';
 import { invalid } from '../errors';
 import type { Repos } from './context';
+
+const EMPTY_EMERGENCY: EmergencyInfo = {
+  essentialMonthlyCents: 0, monthsUsed: 0, savedCents: 0, coverageTenths: null, potId: null, suggestedTargetCents: { months3: 0, months6: 0 },
+  recommendedMonths: 3, recommendedReason: 'base de 3 meses', liquidCents: null, explanation: '',
+};
 
 const SPEND_TYPES_SQL = "('expense','fee','cash_withdrawal','refund')";
 
@@ -205,7 +212,40 @@ export class AnalyticsService {
       feesByMonth: fees,
       goalTargetCents: goalTarget(this.repos.goals.forMonth(addMonths(base, 1)) ?? this.repos.goals.latest(), expectedIncome.cents),
       uncategorizedCount: this.repos.transactions.uncategorizedCount(),
+      protectedCategoryIds: settings.profile.priorityCategoryIds,
     });
+    const extra = this.moreContext?.();
+    if (extra) {
+      const peopleId = this.repos.categories.idByKey('people');
+      const monthly = (sql: string, ...params: (string | number)[]) => new Map(
+        this.repos.db.all<{ month: string; cents: number; n: number }>(sql, ...params).map((r) => [r.month, { cents: Number(r.cents), count: Number(r.n) }] as const),
+      );
+      const window = [firstDayOfMonth(addMonths(base, -3)), lastDayOfMonth(base)] as const;
+      const people = monthly(
+        `SELECT substr(date, 1, 7) AS month, -SUM(amount_cents) AS cents, COUNT(*) AS n FROM transactions
+         WHERE is_excluded = 0 AND category_id = ? AND type IN ('expense','refund') AND date >= ? AND date <= ? GROUP BY month`,
+        peopleId, ...window,
+      );
+      const cash = monthly(
+        `SELECT substr(date, 1, 7) AS month, -SUM(amount_cents) AS cents, COUNT(*) AS n FROM transactions
+         WHERE is_excluded = 0 AND type = 'cash_withdrawal' AND date >= ? AND date <= ? GROUP BY month`,
+        ...window,
+      );
+      const more = generateMoreRecommendations({
+        ...extra,
+        referenceMonth: base,
+        today: this.today(),
+        summaries: data.summaries,
+        activeRecurring: this.activeRecurring(),
+        priceIncreases: this.priceIncreases(),
+        peopleByMonth: people,
+        cashByMonth: new Map([...cash].map(([m, v]) => [m, v.cents])),
+        illustrativeRateBp: 200,
+      });
+      const pRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      recs.push(...more);
+      recs.sort((a, b) => pRank[a.priority]! - pRank[b.priority]! || (b.estimatedMonthlyImpactCents ?? 0) - (a.estimatedMonthlyImpactCents ?? 0));
+    }
     this.repos.recommendations.replaceActive(recs);
     const dismissed = this.repos.recommendations.dismissedKeys();
     return recs.filter((r) => !dismissed.has(r.key));
@@ -387,7 +427,65 @@ export class AnalyticsService {
         .filter((s) => s.hasData)
         .map((s) => ({ month: s.month, savingsCents: s.savingsCents, targetCents: s.goal?.targetCents ?? null, rateBp: s.savingsRateBp })),
       monthsOfData: available.length,
+      insights: this.savingsInsights(ref, data),
+      emergency: this.emergencyInfo?.() ?? EMPTY_EMERGENCY,
     };
+  }
+
+  /** Set by the composition root (wealth depends on analytics). */
+  emergencyInfo: (() => EmergencyInfo) | null = null;
+  /** Context from accounts, goals and loans for the wider suggestions (set by the composition root). */
+  moreContext: (() => Pick<MoreContext, 'profile' | 'currentAccountsCents' | 'savingsAccountsCents' | 'pots' | 'loans' | 'pendingTransferReviews' | 'emergencyPotCents' | 'recommendedEmergencyMonths' | 'recommendedEmergencyReason' | 'essentialMonthlyCents'>) | null = null;
+
+  /** Recurring payments whose last charge is higher than the usual previous amount. */
+  private priceIncreases(): MoreContext['priceIncreases'] {
+    const active = this.activeRecurring();
+    if (!active.length) return [];
+    const out: MoreContext['priceIncreases'] = [];
+    for (const r of active) {
+      const charges = this.repos.db.all<{ date: string; cents: number }>(
+        `SELECT date, -amount_cents AS cents FROM transactions WHERE merchant_id = ? AND type IN ('expense','fee') AND is_excluded = 0 AND amount_cents < 0
+         ORDER BY date DESC LIMIT 4`,
+        r.merchantId,
+      );
+      if (charges.length < 3) continue;
+      const [last, ...prev] = charges;
+      const usual = [...prev].map((c) => Number(c.cents)).sort((a, b) => a - b)[Math.floor(prev.length / 2)]!;
+      const now = Number(last!.cents);
+      if (now - usual >= 50 && now >= usual * 1.02 && now <= usual * 1.5) out.push({ name: r.merchantName, previousCents: usual, currentCents: now, date: last!.date });
+    }
+    return out.sort((a, b) => b.currentCents - b.previousCents - (a.currentCents - a.previousCents));
+  }
+
+  private savingsInsights(ref: YearMonth, data: Dataset): SavingsInsights {
+    const a = data.aggregates.get(ref);
+    const kind = (k: 'essential' | 'discretionary' | 'neutral') => (a ? a.byKind[k].recurring + a.byKind[k].variable : 0);
+    const range = [firstDayOfMonth(ref), lastDayOfMonth(ref)] as const;
+    const peopleIds = [this.repos.categories.idByKey('people')];
+    const people = this.repos.db.get<{ net: number | null }>(
+      `SELECT SUM(CASE WHEN type IN ('expense','fee','cash_withdrawal') THEN -amount_cents WHEN type = 'refund' THEN -amount_cents ELSE 0 END) AS net
+       FROM transactions WHERE is_excluded = 0 AND category_id = ? AND date >= ? AND date <= ?`,
+      peopleIds[0]!, ...range,
+    );
+    const moved = this.repos.db.get<{ out: number | null }>(
+      `SELECT SUM(-amount_cents) AS out FROM transactions WHERE is_excluded = 0 AND type = 'transfer' AND amount_cents < 0
+         AND (counter_account_id IS NOT NULL OR transfer_match_id IS NOT NULL OR category_id = ?) AND date >= ? AND date <= ?`,
+      this.repos.categories.idByKey('transfers'), ...range,
+    );
+    const year = ref.slice(0, 4);
+    return buildSavingsInsights({
+      month: ref,
+      summary: data.summaries.get(ref)!,
+      essentialCents: kind('essential'),
+      discretionaryCents: kind('discretionary'),
+      neutralCents: kind('neutral'),
+      peopleCents: Math.max(0, Number(people?.net ?? 0)),
+      movedToOwnCents: Number(moved?.out ?? 0),
+      yearSummaries: [...data.summaries.values()].filter((s) => s.month.startsWith(year) && s.month <= ref),
+      recurring: this.activeRecurring(),
+      today: todayIso(this.now()),
+      horizonDays: 60,
+    });
   }
 
   /**

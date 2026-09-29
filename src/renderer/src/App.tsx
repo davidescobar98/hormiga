@@ -11,13 +11,14 @@ import { ImportPage } from './pages/ImportPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { WealthPage } from './pages/WealthPage';
+import { AccountsPage } from './pages/AccountsPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { PendingPasswordPrompt } from './components/PasswordPrompt';
 import { WhatsNew } from './components/WhatsNew';
 import { UpdateBanner } from './components/UpdateBanner';
 import type { Theme } from '../../shared/types';
 
-export type PageId = 'dashboard' | 'transactions' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'import' | 'settings';
+export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'import' | 'settings';
 
 export interface NavParams {
   categoryId?: number;
@@ -26,6 +27,7 @@ export interface NavParams {
   from?: string;
   to?: string;
   documentId?: number;
+  accountId?: number;
   section?: string;
 }
 
@@ -35,6 +37,7 @@ export const useNavigate = () => useContext(NavContext);
 const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Resumen', icon: 'home' },
   { id: 'transactions', label: 'Movimientos', icon: 'list' },
+  { id: 'accounts', label: 'Cuentas', icon: 'wallet' },
   { id: 'categories', label: 'Categorías', icon: 'tag' },
   { id: 'recurring', label: 'Recurrentes', icon: 'repeat' },
   { id: 'analytics', label: 'Análisis', icon: 'chart' },
@@ -101,6 +104,7 @@ function Shell() {
           <UpdateBanner />
           {page === 'dashboard' && <DashboardPage />}
           {page === 'transactions' && <TransactionsPage key={JSON.stringify(params)} initial={params} />}
+          {page === 'accounts' && <AccountsPage key={params.section ?? ''} initialSection={params.section} />}
           {page === 'categories' && <CategoriesPage />}
           {page === 'recurring' && <RecurringPage />}
           {page === 'analytics' && <AnalyticsPage />}

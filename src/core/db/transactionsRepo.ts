@@ -22,6 +22,8 @@ export interface NewTransaction {
   classificationConfidence: number;
   classificationDetail: string | null;
   ruleId: number | null;
+  accountId?: number | null;
+  counterAccountId?: number | null;
 }
 
 interface TxRow {
@@ -51,12 +53,16 @@ interface TxRow {
   created_at: string;
   updated_at: string;
   rule_id: number | null;
+  account_id: number | null;
+  account_name: string | null;
+  transfer_match_id: number | null;
 }
 
 const SELECT = `
   SELECT t.*, c.name AS category_name, c.color AS category_color, m.display_name AS merchant_name,
-         r.status AS recurring_status, d.source AS doc_source
+         r.status AS recurring_status, d.source AS doc_source, a.name AS account_name
   FROM transactions t
+  LEFT JOIN accounts a ON a.id = t.account_id
   JOIN categories c ON c.id = t.category_id
   LEFT JOIN merchants m ON m.id = t.merchant_id
   LEFT JOIN recurring_expenses r ON r.merchant_id = t.merchant_id
@@ -98,6 +104,9 @@ function toDto(r: TxRow): TransactionDTO {
     notes: r.notes,
     recurringStatus: r.recurring_status,
     source: r.doc_source,
+    accountId: r.account_id,
+    accountName: r.account_name,
+    transferMatchId: r.transfer_match_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -112,12 +121,12 @@ export class TransactionsRepo {
     const r = this.db.run(
       `INSERT INTO transactions(document_id, fingerprint, date, booking_date, description_raw, description_normalized,
          merchant_raw, merchant_id, amount_cents, currency, type, category_id, classification_source,
-         classification_confidence, classification_detail, rule_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?)
+         classification_confidence, classification_detail, rule_id, created_at, updated_at, account_id, counter_account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(fingerprint) DO NOTHING`,
       t.documentId, t.fingerprint, t.date, t.bookingDate, t.descriptionRaw, t.descriptionNormalized, t.merchantRaw,
       t.merchantId, t.amountCents, t.type, t.categoryId, t.classificationSource, t.classificationConfidence,
-      t.classificationDetail, t.ruleId, ts, ts,
+      t.classificationDetail, t.ruleId, ts, ts, t.accountId ?? null, t.counterAccountId ?? null,
     );
     return r.changes > 0 ? r.lastInsertRowid : null;
   }
@@ -139,6 +148,10 @@ export class TransactionsRepo {
     if (q.merchantId !== undefined) {
       where.push('t.merchant_id = ?');
       params.push(q.merchantId);
+    }
+    if (q.accountId !== undefined) {
+      where.push('(t.account_id = ? OR t.counter_account_id = ?)');
+      params.push(q.accountId, q.accountId);
     }
     if (q.from) {
       where.push('t.date >= ?');

@@ -1,4 +1,5 @@
 import { centsToDecimalString } from '../../shared/money';
+import type { AccountsService } from './accountsService';
 import { addMonths, monthOf, todayIso } from '../../shared/dates';
 import { CLASSIFICATION_SOURCE_LABELS, TRANSACTION_TYPE_LABELS } from '../../shared/types';
 import type { Repos } from './context';
@@ -17,6 +18,9 @@ export function csvCell(value: string | number | null | undefined): string {
 }
 
 export class DataService {
+  /** Set by the composition root. */
+  accounts: AccountsService | null = null;
+
   constructor(private readonly repos: Repos, private readonly importer: ImportService, private readonly now: () => Date) {}
 
   /** Semicolon-separated, decimal comma, UTF-8 with BOM: opens correctly in Spanish Excel/LibreOffice. */
@@ -60,7 +64,19 @@ export class DataService {
   loadDemo(): { transactions: number } {
     if (this.repos.documents.demoDocumentIds().length > 0) return { transactions: 0 };
     const rows = generateDemoRows(this.now());
-    const { inserted } = this.importer.insertSyntheticDocument('Datos de demostración (ficticios)', rows);
+    const { inserted, documentId } = this.importer.insertSyntheticDocument('Datos de demostración (ficticios)', rows);
+    // A fictitious current account (balance known today) and a remunerated savings account that receives the
+    // monthly transfers to "own savings" of the demo data.
+    const ts = this.now().toISOString();
+    const today = todayIso(this.now());
+    const current = this.repos.db.run(
+      `INSERT INTO accounts(name, bank, kind, source_kind, anchor_balance_cents, anchor_date, anchor_source, include_in_net_worth, created_at, updated_at)
+       VALUES (?, 'Banco ficticio', 'current', 'account', 385000, ?, 'user', 1, ?, ?)`,
+      `Cuenta nómina${DEMO_SUFFIX}`, today, ts, ts,
+    ).lastInsertRowid;
+    this.repos.db.run('UPDATE transactions SET account_id = ? WHERE document_id = ?', current, documentId);
+    this.repos.accounts.createManual({ name: `Cuenta remunerada${DEMO_SUFFIX}`, bank: 'Banco ficticio', kind: 'savings', balanceCents: 250000, date: rows[0]!.date, annualRateBp: 200, ownTransferTarget: true });
+    this.accounts?.refreshTransfers();
     if (this.repos.income.list().length === 0) {
       this.repos.income.save({ kind: 'salary', label: DEMO_INCOME_LABEL, amountCents: 245000, startMonth: rows[0]!.date.slice(0, 7), endMonth: null });
     }
@@ -121,6 +137,8 @@ export class DataService {
       for (const table of ['import_review_items', 'transactions', 'recurring_expenses', 'recommendations', 'email_imports', 'statements', 'documents']) {
         db.run(`DELETE FROM ${table}`);
       }
+      // Imported accounts go with their movements; manual accounts (and their balances) are kept.
+      db.run("DELETE FROM accounts WHERE source_kind <> 'manual'");
       this.repos.settings.delete('demo.goalSet');
       return { transactions, documents };
     });
@@ -140,6 +158,7 @@ export class DataService {
       }
       for (const p of this.repos.pots.list()) if (p.name.endsWith(DEMO_SUFFIX)) this.repos.pots.delete(p.id);
       for (const a of this.repos.assets.list()) if (a.name.endsWith(DEMO_SUFFIX)) this.repos.assets.delete(a.id);
+      this.repos.db.run("DELETE FROM accounts WHERE name LIKE ?", `%${DEMO_SUFFIX}`);
       // Merchants no longer referenced are dropped to keep the catalogue clean.
       this.repos.db.run('DELETE FROM merchants WHERE id NOT IN (SELECT DISTINCT merchant_id FROM transactions WHERE merchant_id IS NOT NULL)');
     });

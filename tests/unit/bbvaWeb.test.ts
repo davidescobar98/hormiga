@@ -48,30 +48,37 @@ describe('BBVA "Últimos movimientos" (online banking PDF)', () => {
     const tx = (date: string) => core.repos.transactions.list({ from: date, to: date }).items[0]!;
     expect(tx('2026-09-01')).toMatchObject({ merchantName: 'Mercadona', categoryName: 'Supermercado', type: 'expense' });
     expect(tx('2026-09-03')).toMatchObject({ merchantName: 'Jazztel', categoryName: 'Servicios', type: 'expense' });
-    expect(tx('2026-09-05')).toMatchObject({ merchantName: 'Spotify', type: 'transfer' });
+    // A subscription paid by transfer is still a subscription; a Bizum to someone counts as spending.
+    expect(tx('2026-09-05')).toMatchObject({ merchantName: 'Spotify', type: 'expense', categoryName: 'Suscripciones' });
+    expect(tx('2026-09-22')).toMatchObject({ type: 'expense' });
     expect(tx('2026-09-08')).toMatchObject({ type: 'income', categoryName: 'Ingresos' });
     expect(tx('2026-09-10')).toMatchObject({ categoryName: 'Préstamos', type: 'expense' });
     expect(tx('2026-09-12')).toMatchObject({ categoryName: 'Vivienda', type: 'expense' });
     expect(tx('2026-09-15')).toMatchObject({ type: 'income' });
-    expect(tx('2026-09-18')).toMatchObject({ merchantName: 'Bizum', type: 'transfer' });
+    expect(tx('2026-09-18')).toMatchObject({ merchantName: 'Bizum', type: 'expense', categoryName: 'Bizum y transferencias' });
     expect(tx('2026-09-20')).toMatchObject({ type: 'cash_withdrawal', categoryName: 'Efectivo' });
 
     // Income is taken from the documents automatically (default "auto" mode), without configuring anything.
     const s = core.analytics.dashboard('2026-09').summary;
     expect(s.incomeCents).toBe(205000);
-    expect(s.spendingCents).toBe(4000 + 3000 + 30000 + 4550 + 105000);
+    expect(s.spendingCents).toBe(4000 + 3000 + 30000 + 4550 + 105000 + 999 + 500 + 10000);
+    // The account is created from the statement; its balance comes from the printed running balance. The test's
+    // today is 15/09, before the last movement (22/09): later movements are undone → balance printed on 15/09.
+    const [acc] = core.accounts.list();
+    expect(acc).toMatchObject({ bank: 'BBVA', sourceKind: 'account', balanceCents: 212451, anchor: { balanceCents: 96951, date: '2026-09-22', source: 'statement' } });
+    expect(core.repos.transactions.list({ accountId: acc!.id }).total).toBe(10);
   });
 
-  it('moving a Bizum to a spending category makes it count as spending (and back)', async () => {
+  it('a Bizum counts as spending; moving it between spending categories keeps it, to own accounts removes it', async () => {
     const core = makeCore();
     await core.importer.importDocument({ bytes: await buildWebMovementsPdf(spec), fileName: 'movimientos.pdf', source: 'manual' });
     const bizum = core.repos.transactions.list({ from: '2026-09-18', to: '2026-09-18' }).items[0]!;
     const restaurants = core.repos.categories.list().find((c) => c.name === 'Restaurantes')!;
     const before = core.analytics.dashboard('2026-09').summary.spendingCents;
     expect(core.categorization.updateTransaction({ id: bizum.id, categoryId: restaurants.id }).transaction.type).toBe('expense');
-    expect(core.analytics.dashboard('2026-09').summary.spendingCents).toBe(before + 500);
-    const transfers = core.repos.categories.list().find((c) => c.name === 'Transferencias')!;
-    expect(core.categorization.updateTransaction({ id: bizum.id, categoryId: transfers.id }).transaction.type).toBe('transfer');
     expect(core.analytics.dashboard('2026-09').summary.spendingCents).toBe(before);
+    const own = core.repos.categories.list().find((c) => c.name === 'Entre mis cuentas')!;
+    expect(core.categorization.updateTransaction({ id: bizum.id, categoryId: own.id }).transaction.type).toBe('transfer');
+    expect(core.analytics.dashboard('2026-09').summary.spendingCents).toBe(before - 500);
   });
 });

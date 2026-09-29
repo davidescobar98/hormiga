@@ -10,6 +10,10 @@ import type { AssetRow, AssetsRepo, PotsRepo } from '../db/wealthRepo';
 import type { MarketProvider } from '../market/yahoo';
 import { AppError } from '../errors';
 import type { AnalyticsService } from './analyticsService';
+import type { AccountsService } from './accountsService';
+import { DEFAULT_PROFILE } from '../db/settingsRepo';
+import { recommendedEmergencyMonths } from '../domain/profile';
+import type { FinancialProfile } from '../../shared/types';
 
 /** Days without a new valuation after which an asset is flagged as out of date. */
 const STALE_DAYS = 90;
@@ -24,6 +28,10 @@ export class WealthService {
     private readonly market: MarketProvider | null = null,
     private readonly marketEnabled: () => boolean = () => false,
   ) {}
+
+  /** Set by the composition root. */
+  accounts: AccountsService | null = null;
+  profile: () => FinancialProfile = () => DEFAULT_PROFILE;
 
   private today() {
     return todayIso(this.now());
@@ -50,6 +58,11 @@ export class WealthService {
       coverageTenths,
       potId: pot?.id ?? null,
       suggestedTargetCents: { months3: e.cents * 3, months6: e.cents * 6 },
+      ...(() => {
+        const r = recommendedEmergencyMonths(this.profile());
+        return { recommendedMonths: r.months, recommendedReason: r.reasons.join(', ') };
+      })(),
+      liquidCents: this.accounts?.liquidCents() ?? null,
       explanation: e.months === 0
         ? 'Aún no hay meses completos con datos para estimar tu gasto esencial.'
         : `Gasto esencial mensual = media ${period} en categorías esenciales (vivienda, supermercado, suministros, seguros, salud, transporte…), incluidos recibos recurrentes: ${formatCents(e.cents)}. Cobertura = fondo de emergencia ÷ gasto esencial mensual.`,
@@ -162,24 +175,43 @@ export class WealthService {
     const refs = this.refs();
     const vals = this.assets.valuations();
     const nw = netWorthAt(refs, vals, today);
+    const accounts = (this.accounts?.list() ?? []).filter((a) => a.includeInNetWorth && a.sourceKind !== 'card');
+    const accountsTotal = accounts.reduce((t, a) => t + (a.balanceCents ?? 0), 0);
     const invested = assets.filter((a) => INVESTMENT_TYPES.includes(a.type) && a.valueCents !== null && a.contributedCents !== null);
     const investedValue = invested.reduce((s, a) => s + a.valueCents!, 0);
     const investedContributed = invested.reduce((s, a) => s + a.contributedCents!, 0);
-    const starts = [...vals.map((v) => v.date), ...refs.map((r) => r.loan?.startDate).filter((d): d is string => !!d)].sort();
+    const starts = [
+      ...vals.map((v) => v.date),
+      ...refs.map((r) => r.loan?.startDate).filter((d): d is string => !!d),
+      ...accounts.filter((a) => a.balanceCents !== null).map((a) => a.firstDate ?? a.anchor?.date).filter((d): d is string => !!d),
+    ].sort();
     const current = monthOf(today);
     const first = starts.length ? monthOf(starts[0]!) : current;
     const from = first < addMonths(current, -35) ? addMonths(current, -35) : first;
+    const months = monthRange(from, current);
+    let history = starts.length ? netWorthHistory(refs, vals, months, today) : [];
+    if (history.length && this.accounts) {
+      const balances = this.accounts.monthEndBalances(months);
+      history = history.map((h, i) => {
+        const cash = balances.reduce((t, b) => t + (b.values[i] ?? 0), 0);
+        return { ...h, assetsCents: h.assetsCents + cash, netWorthCents: h.netWorthCents + cash };
+      });
+    }
+    const cashItems = accounts.filter((a) => a.balanceCents !== null && a.balanceCents > 0).map((a) => ({ type: 'cash' as const, valueCents: a.balanceCents! }));
     return {
       assets,
-      totalAssetsCents: nw.assetsCents,
+      accounts,
+      accountsTotalCents: accountsTotal,
+      accountsWithoutBalance: accounts.filter((a) => a.balanceCents === null).length,
+      totalAssetsCents: nw.assetsCents + accountsTotal,
       totalLiabilitiesCents: nw.liabilitiesCents,
-      netWorthCents: nw.netWorthCents,
+      netWorthCents: nw.netWorthCents + accountsTotal,
       investedValueCents: investedValue,
       investedContributedCents: investedContributed,
       investedGainCents: investedValue - investedContributed,
       investedReturnBp: investedContributed > 0 ? Math.round(((investedValue - investedContributed) * 10000) / investedContributed) : null,
-      allocation: allocation(assets.filter((a) => a.valueCents !== null).map((a) => ({ type: a.type, valueCents: a.valueCents! }))),
-      history: starts.length ? netWorthHistory(refs, vals, monthRange(from, current), today) : [],
+      allocation: allocation([...assets.filter((a) => a.valueCents !== null).map((a) => ({ type: a.type, valueCents: a.valueCents! })), ...cashItems]),
+      history,
       potsSavedCents: this.pots.list().reduce((a, p) => a + p.savedCents, 0),
     };
   }
@@ -188,6 +220,22 @@ export class WealthService {
     const ref = this.refs([this.assets.get(assetId)])[0]!;
     if (!ref.loan) throw new AppError('VALIDATION', 'Este elemento no es un préstamo con cuadro de amortización.');
     return ref.loan;
+  }
+
+  /** Loans with their current state, for suggestions. */
+  loanSummaries(): { name: string; annualRateBp: number; outstandingCents: number; interestSavedCents: (amount: number) => number }[] {
+    const today = this.today();
+    return this.refs()
+      .filter((r) => r.loan)
+      .map((r) => {
+        const terms = r.loan!;
+        return {
+          name: r.row.name,
+          annualRateBp: terms.annualRateBp,
+          outstandingCents: loanStatus(terms, today).outstandingCents,
+          interestSavedCents: (amount: number) => earlyRepayment(terms, today, amount, 'reduce_term').interestSavedCents,
+        };
+      });
   }
 
   loanSchedule(assetId: number): LoanScheduleRow[] {

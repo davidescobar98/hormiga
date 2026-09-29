@@ -216,6 +216,7 @@ Más detalle en [docs/security.md](docs/security.md).
 
 ## Documentación técnica
 
+- [docs/accounts-and-transfers.md](docs/accounts-and-transfers.md) — cuentas y saldos, transferencias, perfil y ahorro ampliado.
 - [docs/architecture.md](docs/architecture.md) — capas, contrato IPC, modelo de datos.
 - [docs/email-ingestion.md](docs/email-ingestion.md) — Gmail, detección, sincronización, deduplicación.
 - [docs/statement-parsing.md](docs/statement-parsing.md) — pipeline de documentos y cómo adaptar el formato BBVA real.

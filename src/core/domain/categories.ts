@@ -11,7 +11,7 @@ export interface SystemCategory {
 export type SystemCategoryKey =
   | 'housing' | 'groceries' | 'restaurants' | 'transport' | 'fuel' | 'travel' | 'leisure' | 'shopping'
   | 'subscriptions' | 'technology' | 'health' | 'sport' | 'education' | 'utilities' | 'insurance' | 'taxes'
-  | 'loans' | 'fees' | 'cash' | 'transfers' | 'income' | 'other' | 'uncategorized';
+  | 'loans' | 'fees' | 'cash' | 'people' | 'shared' | 'transfers' | 'income' | 'other' | 'uncategorized';
 
 /**
  * Default taxonomy. "kind" drives savings recommendations:
@@ -38,7 +38,9 @@ export const SYSTEM_CATEGORIES: SystemCategory[] = [
   { key: 'loans', name: 'Préstamos', kind: 'essential', color: '#7a6a9a' },
   { key: 'fees', name: 'Comisiones', kind: 'neutral', color: '#c0504d' },
   { key: 'cash', name: 'Efectivo', kind: 'neutral', color: '#8a8f98' },
-  { key: 'transfers', name: 'Transferencias', kind: 'neutral', color: '#9aa0a8', excludedFromSpending: true },
+  { key: 'people', name: 'Bizum y transferencias', kind: 'neutral', color: '#8f7ab8' },
+  { key: 'shared', name: 'Gastos compartidos', kind: 'essential', color: '#b0806a' },
+  { key: 'transfers', name: 'Entre mis cuentas', kind: 'neutral', color: '#9aa0a8', excludedFromSpending: true },
   { key: 'income', name: 'Ingresos', kind: 'neutral', color: '#2e8b57', excludedFromSpending: true },
   { key: 'other', name: 'Otros', kind: 'neutral', color: '#a3a3a3' },
   { key: 'uncategorized', name: 'Sin clasificar', kind: 'neutral', color: '#c4c4c4' },

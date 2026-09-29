@@ -5,8 +5,10 @@ import type { AppSettings, DetectionConfig, IncomeMode, Theme } from '../../../s
 import { Callout, Card, Dialog, Field, Loading, Segmented, useToast } from '../components/ui';
 import { EmailConnectPanel, GoalEditor, IncomeEditor } from '../components/flows';
 import { describeUpdate, useUpdateStatus } from '../components/UpdateBanner';
+import { ProfileEditor } from '../components/ProfileEditor';
 
 const SECTIONS = [
+  { id: 'profile', label: 'Tu perfil' },
   { id: 'email', label: 'Cuenta de correo' },
   { id: 'bbva', label: 'Detección' },
   { id: 'income', label: 'Ingresos' },
@@ -60,6 +62,10 @@ export function SettingsPage({ initialSection }: { initialSection?: string }) {
       <nav className="toolbar" aria-label="Secciones de ajustes">
         {SECTIONS.map((sec) => <button key={sec.id} className="btn sm ghost" onClick={() => refs.current[sec.id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{sec.label}</button>)}
       </nav>
+
+      <section ref={(el) => { refs.current.profile = el; }}>
+        <Card title="Tu perfil" hint="Opcional: adapta las sugerencias a tu situación"><ProfileEditor profile={s.profile} /></Card>
+      </section>
 
       <section ref={(el) => { refs.current.email = el; }}>
         <Card title="Cuenta de correo" hint="Gmail mediante OAuth 2.0. Hormiga nunca ve ni guarda tu contraseña.">

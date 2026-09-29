@@ -11,6 +11,7 @@ import { ImportService } from './services/importService';
 import { RecurringService } from './services/recurringService';
 import { SyncService } from './services/syncService';
 import { WealthService } from './services/wealthService';
+import { AccountsService } from './services/accountsService';
 import { YahooMarketProvider, type MarketProvider } from './market/yahoo';
 
 export interface CoreDeps {
@@ -39,6 +40,7 @@ export interface Core {
   data: DataService;
   gmailAuth: GmailAuth;
   wealth: WealthService;
+  accounts: AccountsService;
 }
 
 /** Composition root of the application layer (no Electron dependencies: fully testable in Node). */
@@ -53,6 +55,8 @@ export function createCore(deps: CoreDeps): Core {
     recurring.detect();
     changed('import');
   });
+  const accounts = new AccountsService(repos, categorization, deps.now);
+  importer.accounts = accounts;
   const analytics = new AnalyticsService(repos, deps.now);
   const gmailAuth = new GmailAuth(deps.vault, deps.openExternal, deps.log, deps.envOAuthClient);
   const providerFactory =
@@ -69,7 +73,29 @@ export function createCore(deps: CoreDeps): Core {
     });
   const sync = new SyncService(repos, gmailAuth, providerFactory, importer, deps.log, deps.now, deps.emitSyncProgress);
   const data = new DataService(repos, importer, deps.now);
+  data.accounts = accounts;
   const market = deps.marketProvider === undefined ? new YahooMarketProvider() : deps.marketProvider;
   const wealth = new WealthService(repos.pots, repos.assets, analytics, deps.now, market, () => repos.settings.getSettings().marketDataEnabled);
-  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth };
+  wealth.accounts = accounts;
+  wealth.profile = () => repos.settings.getSettings().profile;
+  analytics.emergencyInfo = () => wealth.emergency(wealth.potDTOs());
+  analytics.moreContext = () => {
+    const pots = wealth.potDTOs();
+    const e = wealth.emergency(pots);
+    const list = accounts.list().filter((a) => a.includeInNetWorth && a.balanceCents !== null && a.sourceKind !== 'card');
+    const sum = (kinds: string[]) => (list.length ? list.filter((a) => kinds.includes(a.kind)).reduce((t, a) => t + a.balanceCents!, 0) : null);
+    return {
+      profile: repos.settings.getSettings().profile,
+      essentialMonthlyCents: e.essentialMonthlyCents,
+      recommendedEmergencyMonths: e.recommendedMonths,
+      recommendedEmergencyReason: e.recommendedReason,
+      emergencyPotCents: e.savedCents,
+      currentAccountsCents: sum(['current', 'other']),
+      savingsAccountsCents: sum(['savings']),
+      pots,
+      loans: wealth.loanSummaries(),
+      pendingTransferReviews: accounts.counterparties().filter((c) => c.needsReview).length,
+    };
+  };
+  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts };
 }

@@ -79,6 +79,9 @@ export interface NewStatement {
   declaredTotalCents: number | null;
   computedTotalCents: number;
   issues: string[];
+  accountId?: number | null;
+  endBalanceCents?: number | null;
+  endBalanceDate?: string | null;
 }
 
 export interface NewReviewItem {
@@ -142,9 +145,9 @@ export class DocumentsRepo {
   insertStatement(s: NewStatement): number {
     return this.db.run(
       `INSERT INTO statements(document_id, bank, kind, account_hint, period_start, period_end, declared_total_cents,
-         computed_total_cents, issues, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         computed_total_cents, issues, created_at, account_id, end_balance_cents, end_balance_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       s.documentId, s.bank, s.kind, s.accountHint, s.periodStart, s.periodEnd, s.declaredTotalCents, s.computedTotalCents,
-      JSON.stringify(s.issues), this.now().toISOString(),
+      JSON.stringify(s.issues), this.now().toISOString(), s.accountId ?? null, s.endBalanceCents ?? null, s.endBalanceDate ?? null,
     ).lastInsertRowid;
   }
 

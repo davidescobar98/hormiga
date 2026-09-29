@@ -21,6 +21,8 @@ export const CHANNELS = [
   'data.info', 'data.exportTransactions', 'data.backup', 'data.restore', 'data.deleteAll', 'data.loadDemo',
   'data.removeDemo', 'data.openDataDir', 'data.clearImported',
   'app.updateStatus', 'app.checkUpdates', 'app.installUpdate',
+  'accounts.list', 'accounts.update', 'accounts.setBalance', 'accounts.createManual', 'accounts.merge', 'accounts.deleteManual',
+  'accounts.counterparties', 'accounts.decideCounterparty',
   'pots.overview', 'pots.save', 'pots.delete', 'pots.movements', 'pots.addMovement', 'pots.deleteMovement',
   'wealth.overview', 'wealth.saveAsset', 'wealth.deleteAsset', 'wealth.valuations', 'wealth.saveValuation', 'wealth.deleteValuation',
   'wealth.loanSchedule', 'wealth.earlyRepayment', 'market.search', 'market.returns',

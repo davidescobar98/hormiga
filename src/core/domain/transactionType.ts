@@ -8,12 +8,19 @@ const K = (list: string[]) => list.map(normalizeText);
 const REFUND = K(['DEVOLUCION', 'DEVOL', 'ABONO COMPRA', 'ABONO POR DEVOLUCION', 'REEMBOLSO', 'REFUND', 'ANULACION', 'RETROCESION', 'ABONO OPERACION']);
 const FEE = K(['COMISION', 'COMISIONES', 'CUOTA TARJETA', 'CUOTA ANUAL', 'CUOTA MANTENIMIENTO', 'GASTOS MANTENIMIENTO', 'MANTENIMIENTO CUENTA', 'INTERESES DEUDORES', 'INTERESES TARJETA', 'INTERESES APLAZAMIENTO', 'RECARGO', 'COMISION CAMBIO DIVISA']);
 const CASH = K(['CAJERO', 'REINTEGRO', 'DISPOSICION EFECTIVO', 'DISP EFECTIVO', 'RETIRADA EFECTIVO', 'RETIRADA DE EFECTIVO', 'DISPOSICION CAJERO', 'ATM', 'RET EFECTIVO', 'RET EFEC']);
-const TRANSFER = K(['TRANSFERENCIA', 'TRANSF', 'TRASPASO', 'BIZUM', 'ENVIO DE DINERO', 'LIQUIDACION TARJETA', 'LIQUIDACION DE TARJETA', 'PAGO TARJETA CREDITO', 'PAGO TARJETA DE CREDITO', 'CARGO TARJETA CREDITO', 'AMORTIZACION TARJETA', 'APORTACION', 'INGRESO EN EFECTIVO', 'INGRESO EFECTIVO']);
+/** Money that stays yours: moved between your own accounts, card settlements, contributions to your own products. */
+export const INTERNAL_TRANSFER = K([
+  'TRASPASO', 'TRASPASOS', 'ENTRE CUENTAS', 'CUENTA PROPIA', 'CUENTAS PROPIAS', 'A MI CUENTA', 'MISMA TITULARIDAD', 'CUENTA AHORRO',
+  'CUENTA DE AHORRO', 'CUENTA REMUNERADA', 'HUCHA', 'LIQUIDACION TARJETA', 'LIQUIDACION DE TARJETA', 'PAGO TARJETA CREDITO',
+  'PAGO TARJETA DE CREDITO', 'CARGO TARJETA CREDITO', 'AMORTIZACION TARJETA', 'APORTACION', 'INGRESO EN EFECTIVO', 'INGRESO EFECTIVO',
+]);
+/** Transfers and Bizum with other people: spending (out) or money received (in) unless they turn out to be yours. */
+export const PERSON_TRANSFER = K(['TRANSFERENCIA', 'TRANSF', 'TRANSFER', 'BIZUM', 'ENVIO DE DINERO', 'ORDEN DE PAGO']);
 /** Incoming transfer from a company (payroll, expenses paid by the employer…). */
 const COMPANY = K(['S L', 'S L U', 'SL', 'SLU', 'S A', 'S A U', 'SA', 'SAU']);
 const INCOME = K(['NOMINA', 'SALARIO', 'PENSION', 'PRESTACION', 'ABONO NOMINA', 'SUBSIDIO', 'HONORARIOS']);
 
-function has(text: string, keywords: string[]): string | null {
+export function hasKeyword(text: string, keywords: string[]): string | null {
   const padded = ` ${text} `;
   return keywords.find((k) => padded.includes(` ${k} `)) ?? null;
 }
@@ -26,27 +33,35 @@ export interface TypeInference {
 /**
  * Infers the financial semantics of a movement from its sign and description.
  * `amountCents` uses the "money in positive / money out negative" convention.
+ * "transfer" means money moved between your own accounts (neutral for spending and savings). Transfers and Bizum
+ * with other people are spending when sent and offset spending (Bizum) or count as income (transfers) when received;
+ * the user's decisions about each beneficiary (own account, partner, other) refine this later.
  */
 export function inferTransactionType(descriptionNormalized: string, amountCents: number, kind: StatementKind): TypeInference {
   const t = descriptionNormalized;
   if (amountCents < 0) {
     // Fees first: "COMISION RET. EFECTIVO" is a fee, not a withdrawal.
-    let k = has(t, FEE);
+    let k = hasKeyword(t, FEE);
     if (k) return { type: 'fee', reason: `Contiene «${k}»` };
-    k = has(t, CASH);
+    k = hasKeyword(t, CASH);
     if (k) return { type: 'cash_withdrawal', reason: `Contiene «${k}»` };
-    k = has(t, TRANSFER);
-    if (k) return { type: 'transfer', reason: `Contiene «${k}»` };
+    k = hasKeyword(t, INTERNAL_TRANSFER);
+    if (k) return { type: 'transfer', reason: `Movimiento entre tus cuentas («${k}»)` };
+    k = hasKeyword(t, PERSON_TRANSFER);
+    if (k) return { type: 'expense', reason: `Pago a otra persona («${k}»)` };
     return { type: 'expense', reason: 'Importe con cargo' };
   }
   if (amountCents > 0) {
-    let k = has(t, REFUND);
+    let k = hasKeyword(t, REFUND);
     if (k) return { type: 'refund', reason: `Contiene «${k}»` };
-    k = has(t, INCOME);
+    k = hasKeyword(t, INCOME);
     if (k) return { type: 'income', reason: `Contiene «${k}»` };
-    k = has(t, TRANSFER);
-    if (k && k.startsWith('TRANSF') && has(t, COMPANY)) return { type: 'income', reason: 'Transferencia recibida de una empresa' };
-    if (k) return { type: 'transfer', reason: `Contiene «${k}»` };
+    k = hasKeyword(t, INTERNAL_TRANSFER);
+    if (k) return { type: 'transfer', reason: `Movimiento entre tus cuentas («${k}»)` };
+    k = hasKeyword(t, PERSON_TRANSFER);
+    if (k === 'BIZUM') return { type: 'refund', reason: 'Bizum recibido: compensa gastos compartidos' };
+    if (k && hasKeyword(t, COMPANY)) return { type: 'income', reason: 'Transferencia recibida de una empresa' };
+    if (k) return { type: 'income', reason: `Dinero recibido de otra persona («${k}»)` };
     if (kind === 'card') return { type: 'refund', reason: 'Abono en extracto de tarjeta' };
     return { type: 'income', reason: 'Abono en cuenta' };
   }

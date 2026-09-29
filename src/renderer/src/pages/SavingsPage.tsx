@@ -6,12 +6,16 @@ import { Badge, Callout, capitalize, Card, EmptyState, ErrorBox, Loading, Money,
 import { SavingsHistoryChart } from '../components/charts';
 import { GoalEditor, RecommendationCard } from '../components/flows';
 import { useNavigate } from '../App';
+import { BenchmarkCard, CushionCard, MoneyFlowCard, UpcomingCard, YearCard } from '../components/SavingsInsightsView';
 
 export function SavingsPage() {
   const [month, setMonth] = useState<string | undefined>(undefined);
   const q = useQuery(() => api('analytics.savings', month ? { month } : undefined), [month]);
   const recs = useQuery(() => api('recommendations.list'), []);
   const months = useQuery(() => api('analytics.dashboard'), []);
+  const settings = useQuery(() => api('settings.get'), []);
+  const profile = settings.data?.profile;
+  const hasProfile = !!profile && (profile.household !== null || profile.incomeStability !== null || profile.housing !== null || profile.ownerNames.length > 0);
   const invalidate = useInvalidate();
   const navigate = useNavigate();
   const s = q.data;
@@ -74,6 +78,32 @@ export function SavingsPage() {
             </div>
           </section>
 
+          {!hasProfile && settings.data && (
+            <Callout tone="info">
+              Cuéntale a Hormiga un poco de ti (con quién vives, tus ingresos, lo que más valoras y tu nombre en el banco) para que las sugerencias se ajusten a tu situación y reconozca tus traspasos entre cuentas.{' '}
+              <button className="btn link" onClick={() => navigate('settings', { section: 'profile' })}>Completar mi perfil</button>
+            </Callout>
+          )}
+          <div className="grid grid-main">
+            <MoneyFlowCard insights={s.insights} />
+            <BenchmarkCard insights={s.insights} />
+          </div>
+          <div className="grid grid-3">
+            <YearCard insights={s.insights} />
+            <CushionCard emergency={s.emergency} hasProfile={hasProfile} />
+            <UpcomingCard insights={s.insights} />
+          </div>
+
+          <Card title="Sugerencias para ahorrar" hint="Calculadas con tus datos; ninguna recomienda productos financieros">
+            {!recs.data ? <Loading /> : recs.data.length === 0 ? <p className="muted">Sin sugerencias por ahora.</p> : (
+              <div className="grid grid-2">
+                {recs.data.slice(0, 10).map((r) => (
+                  <RecommendationCard key={r.key} rec={r} onDismiss={async () => { await api('recommendations.dismiss', { key: r.key }); invalidate(); }} />
+                ))}
+              </div>
+            )}
+          </Card>
+
           <div className="grid grid-main">
             <Card title="Capacidad de ahorro estimada" hint="Fórmula completa, con tus datos">
               {s.capacity.notes.map((n) => <Callout key={n} tone="warning">{n}</Callout>)}
@@ -114,22 +144,9 @@ export function SavingsPage() {
             </div>
           </Card>
 
-          <div className="grid grid-main">
-            <Card title="Ahorro por mes" hint="Barras: ahorro real · línea: objetivo">
-              {s.history.length === 0 ? <p className="muted">Sin meses con datos.</p> : <SavingsHistoryChart history={s.history} />}
-            </Card>
-            <Card title="Dónde podrías ajustar">
-              {!recs.data ? <Loading /> : recs.data.filter((r) => r.tone !== 'info').length === 0 ? (
-                <p className="muted">Sin recomendaciones por ahora.</p>
-              ) : (
-                <div className="stack">
-                  {recs.data.filter((r) => r.tone !== 'info').slice(0, 4).map((r) => (
-                    <RecommendationCard key={r.key} rec={r} onDismiss={async () => { await api('recommendations.dismiss', { key: r.key }); invalidate(); }} />
-                  ))}
-                </div>
-              )}
-            </Card>
-          </div>
+          <Card title="Ahorro por mes" hint="Barras: ahorro real · línea: objetivo">
+            {s.history.length === 0 ? <p className="muted">Sin meses con datos.</p> : <SavingsHistoryChart history={s.history} />}
+          </Card>
           <p className="muted small">
             {capitalize(formatMonth(s.month))} · {s.monthsOfData} meses de datos. Ahorrar es la diferencia entre lo que ingresas y lo que gastas; Hormiga no recomienda productos financieros ni inversiones.
           </p>

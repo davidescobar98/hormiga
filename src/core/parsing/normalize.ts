@@ -30,6 +30,8 @@ export interface NormalizedStatement {
   blockingIssues: string[];
   /** Informational notes. */
   warnings: string[];
+  /** Balance at the end of the last movement's day (printed running balance or declared closing balance). */
+  endBalance: { cents: number; date: IsoDate } | null;
 }
 
 /** Days before the period start a movement may be dated (card statements include late-posted operations). */
@@ -41,7 +43,7 @@ export function normalizeStatement(parsed: ParsedStatement): NormalizedStatement
   const blockingIssues: string[] = [...(parsed.integrityErrors ?? [])];
 
   const candidates = parsed.transactions.map((raw, idx) => normalizeRow(raw, idx, parsed));
-  applyBalanceChain(parsed, candidates, warnings);
+  const chainDir = applyBalanceChain(parsed, candidates, warnings);
 
   // Period: use the declared one, or deduce it from movement dates.
   let periodStart = parsed.periodStart;
@@ -90,7 +92,22 @@ export function normalizeStatement(parsed: ParsedStatement): NormalizedStatement
     warnings.push('El documento no incluye un total verificable: la suma no se ha podido comprobar.');
   }
 
-  return { parsed, candidates, periodStart, periodEnd, computedTotalCents, blockingIssues, warnings };
+  let endBalance: NormalizedStatement['endBalance'] = null;
+  if (chainDir) {
+    // Chronologically last movement with a printed balance: last row (oldest first) or first row (newest first).
+    const idx = chainDir === 'asc' ? [...candidates.keys()].reverse() : [...candidates.keys()];
+    for (const i of idx) {
+      const b = parsed.transactions[i]?.balanceRaw ? parseAmountToCents(parsed.transactions[i]!.balanceRaw!) : null;
+      const d = candidates[i]!.date;
+      if (b !== null && d && candidates[i]!.errors.length === 0) {
+        endBalance = { cents: b, date: d };
+        break;
+      }
+    }
+  } else if (parsed.closingBalanceCents !== null && periodEnd && blockingIssues.length === 0) {
+    endBalance = { cents: parsed.closingBalanceCents, date: periodEnd };
+  }
+  return { parsed, candidates, periodStart, periodEnd, computedTotalCents, blockingIssues, warnings, endBalance };
 }
 
 function normalizeRow(raw: RawTransaction, idx: number, parsed: ParsedStatement): CandidateTransaction {
@@ -125,9 +142,9 @@ function normalizeRow(raw: RawTransaction, idx: number, parsed: ParsedStatement)
  * Detects the ordering (oldest-first or newest-first), fixes signs that contradict the balance, and
  * flags rows whose amount cannot be reconciled.
  */
-function applyBalanceChain(parsed: ParsedStatement, rows: CandidateTransaction[], warnings: string[]): void {
+function applyBalanceChain(parsed: ParsedStatement, rows: CandidateTransaction[], warnings: string[]): 'asc' | 'desc' | null {
   const balances = parsed.transactions.map((t) => (t.balanceRaw ? parseAmountToCents(t.balanceRaw) : null));
-  if (balances.filter((b) => b !== null).length < Math.max(2, rows.length * 0.6)) return;
+  if (balances.filter((b) => b !== null).length < Math.max(2, rows.length * 0.6)) return null;
 
   const check = (dir: 'asc' | 'desc') => {
     let ok = 0;
@@ -147,7 +164,7 @@ function applyBalanceChain(parsed: ParsedStatement, rows: CandidateTransaction[]
   const desc = check('desc');
   const dir = asc.ok >= desc.ok ? 'asc' : 'desc';
   const best = dir === 'asc' ? asc : desc;
-  if (best.total === 0) return;
+  if (best.total === 0) return null;
 
   let fixed = 0;
   for (let i = 1; i < rows.length; i++) {
@@ -172,4 +189,5 @@ function applyBalanceChain(parsed: ParsedStatement, rows: CandidateTransaction[]
     }
   }
   if (fixed > 0) warnings.push(`Se ha corregido el signo de ${fixed} movimiento(s) usando el saldo impreso.`);
+  return dir;
 }

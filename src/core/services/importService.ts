@@ -9,6 +9,8 @@ import { DEFAULT_PARSERS, extractDocument, selectParser } from '../parsing/regis
 import type { StatementParser } from '../parsing/types';
 import type { CategorizationService } from './categorizationService';
 import type { DocumentStore, Logger, Repos } from './context';
+import type { AccountsService } from './accountsService';
+import { refineTransfer } from '../domain/transfers';
 
 export interface ImportRequest {
   bytes: Uint8Array;
@@ -71,6 +73,9 @@ export class ImportService {
     private readonly parsers: StatementParser[] = DEFAULT_PARSERS,
   ) {}
 
+  /** Set by the composition root (accounts depend on categorization too). */
+  accounts: AccountsService | null = null;
+
   async importDocument(req: ImportRequest, hooks: { onPasswordImported?: (o: ImportOutcome) => void } = {}): Promise<ImportOutcome> {
     const base = { fileName: req.fileName, documentId: null, inserted: 0, duplicatesSkipped: 0, reviewCount: 0, pendingToken: null, errorCode: null };
     const sha = sha256Hex(req.bytes);
@@ -127,6 +132,7 @@ export class ImportService {
       const needsReview = invalidRows.length > 0 || normalized.blockingIssues.length > 0;
 
       const result = this.repos.db.transaction(() => {
+        const accountId = this.repos.accounts.resolveForStatement(parsed.bank, parsed.kind, parsed.accountHint);
         const documentId = this.repos.documents.insert({
           sha256: sha,
           fileName: req.fileName,
@@ -147,7 +153,11 @@ export class ImportService {
           declaredTotalCents: parsed.declaredTotalCents,
           computedTotalCents: normalized.computedTotalCents,
           issues: [...normalized.blockingIssues],
+          accountId,
+          endBalanceCents: needsReview ? null : normalized.endBalance?.cents ?? null,
+          endBalanceDate: needsReview ? null : normalized.endBalance?.date ?? null,
         });
+        if (!needsReview && normalized.endBalance) this.repos.accounts.offerStatementBalance(accountId, normalized.endBalance.cents, normalized.endBalance.date);
         if (needsReview) {
           for (const c of normalized.candidates) this.repos.documents.insertReviewItem(toReviewItem(documentId, c));
           return { documentId, inserted: 0, duplicates: 0, review: invalidRows.length || normalized.candidates.length };
@@ -157,6 +167,7 @@ export class ImportService {
       });
 
       if (this.repos.settings.getSettings().keepDocuments) await this.retain(result.documentId, sha, req);
+      if (!needsReview) this.accounts?.refreshTransfers();
       this.afterChange();
       this.log.info('import.completed', { documentId: result.documentId, parser: parser.id, inserted: result.inserted, duplicates: result.duplicates, review: needsReview });
 
@@ -225,11 +236,40 @@ export class ImportService {
   private insertRows(documentId: number | null, rows: InsertableRow[]): { inserted: number; duplicates: number } {
     let inserted = 0;
     let duplicates = 0;
+    const accountId = documentId === null ? null : this.repos.db.get<{ account_id: number | null }>('SELECT account_id FROM statements WHERE document_id = ?', documentId)?.account_id ?? null;
+    const transferCtx = this.accounts?.transferContext() ?? null;
+    // The same account imported in two formats (monthly statement and "últimos movimientos", Excel…): a movement of
+    // that account with the same date and amount already imported from another document is the same movement.
+    const available = new Map<string, number>();
+    const alreadyInAccount = (date: string, amount: number): boolean => {
+      if (accountId === null) return false;
+      const key = `${date}|${amount}`;
+      if (!available.has(key)) {
+        const n = this.repos.db.get<{ n: number }>(
+          'SELECT COUNT(*) AS n FROM transactions WHERE account_id = ? AND date = ? AND amount_cents = ? AND (document_id IS NULL OR document_id <> ?)',
+          accountId, date, amount, documentId ?? -1,
+        )!.n;
+        available.set(key, Number(n));
+      }
+      const left = available.get(key)!;
+      if (left <= 0) return false;
+      available.set(key, left - 1);
+      return true;
+    };
     for (const r of assignFingerprints(rows)) {
+      if (alreadyInAccount(r.date, r.amountCents)) {
+        duplicates++;
+        continue;
+      }
       const merchant = r.merchant ?? normalizeMerchant(r.descriptionRaw);
       const merchantId = this.repos.merchants.upsert(merchant.key, merchant.display);
-      const cat = this.categorization.classify(r.descriptionNormalized, merchant, r.type);
-      const type = cat.source === 'USER' ? this.categorization.alignType(r.type, r.amountCents, this.repos.categories.get(cat.categoryId)) : r.type;
+      const ref = transferCtx ? refineTransfer(r.descriptionRaw, r.descriptionNormalized, r.amountCents, transferCtx) : null;
+      const refCategory = ref ? this.accounts!.categoryFor(ref) : null;
+      const cat = refCategory !== null
+        ? { categoryId: refCategory, source: 'HEURISTIC' as const, confidence: 0.9, detail: ref!.detail, ruleId: null }
+        : this.categorization.classify(r.descriptionNormalized, merchant, ref?.type ?? r.type);
+      const baseType = ref?.type ?? r.type;
+      const type = cat.source === 'USER' ? this.categorization.alignType(baseType, r.amountCents, this.repos.categories.get(cat.categoryId)) : baseType;
       const id = this.repos.transactions.insert({
         documentId,
         fingerprint: r.fingerprint,
@@ -246,6 +286,8 @@ export class ImportService {
         classificationConfidence: cat.confidence,
         classificationDetail: cat.detail,
         ruleId: cat.ruleId,
+        accountId,
+        counterAccountId: ref?.counterAccountId ?? null,
       });
       if (id === null) duplicates++;
       else inserted++;
@@ -253,8 +295,31 @@ export class ImportService {
     return { inserted, duplicates };
   }
 
+  /**
+   * Emailed documents that a previous version of a parser left in review are discarded (they never counted) and
+   * their emails marked for retry, so the next sync downloads and reads them again with the current parser.
+   */
+  retryEmailReviews(parserIds: string[]): number {
+    if (!parserIds.length) return 0;
+    const docs = this.repos.db.all<{ id: number }>(
+      `SELECT id FROM documents WHERE source = 'email' AND status = 'needs_review' AND parser_id IN (${parserIds.map(() => '?').join(',')})`,
+      ...parserIds,
+    );
+    if (!docs.length) return 0;
+    this.repos.db.transaction(() => {
+      for (const d of docs) {
+        this.repos.db.run("UPDATE email_imports SET status = 'failed', error_code = 'RETRY', document_id = NULL WHERE document_id = ?", d.id);
+        this.repos.db.run('DELETE FROM documents WHERE id = ?', d.id);
+      }
+      this.repos.accounts.pruneEmpty();
+    });
+    this.log.info('import.retry_email_reviews', { documents: docs.length });
+    return docs.length;
+  }
+
   /** Used by demo data: rows that did not come from a parsed file. */
   insertSyntheticDocument(label: string, rows: InsertableRow[]): { documentId: number; inserted: number } {
+    // Demo rows: no statement, so no account until the caller assigns one.
     return this.repos.db.transaction(() => {
       const documentId = this.repos.documents.insert({
         sha256: sha256Hex(`demo:${label}`),

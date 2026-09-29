@@ -2,6 +2,7 @@ import type { ClassificationSource, RuleMatchType, TransactionType } from '../..
 import type { SystemCategoryKey } from './categories';
 import { KEYWORD_RULES, type KnownMerchant } from './knowledge';
 import { normalizeText } from './merchant';
+import { hasKeyword, PERSON_TRANSFER } from './transactionType';
 
 export interface UserRule {
   id: number;
@@ -71,7 +72,8 @@ export function matchUserRule(input: Pick<CategorizationInput, 'descriptionNorma
  * 2. movement semantics for non-purchases (HEURISTIC): income, transfer, fee, cash withdrawal
  * 3. known merchant dictionary (MERCHANT)
  * 4. keyword rules (RULE)
- * 5. uncategorized (UNKNOWN)
+ * 5. transfers/Bizum with other people (HEURISTIC, "Bizum y transferencias")
+ * 6. uncategorized (UNKNOWN)
  * Step 2 runs before merchant/keywords because the type (e.g. a transfer) determines whether the movement is
  * spending at all; a "BIZUM A BAR PEPE" must not be counted as restaurant spending.
  */
@@ -107,6 +109,12 @@ export function categorize(input: CategorizationInput, ctx: CategorizationContex
     if (containsWords(input.descriptionNormalized, k.keyword)) {
       return { categoryId: ctx.categoryIdByKey(k.category), source: 'RULE', confidence: 0.75, detail: `Palabra clave «${k.keyword}» (${k.label})`, ruleId: null };
     }
+  }
+
+  // Transfers and Bizum with other people that no rule explains: their own category, which still counts as spending.
+  const person = hasKeyword(input.descriptionNormalized, PERSON_TRANSFER);
+  if (person && (input.type === 'expense' || input.type === 'refund')) {
+    return { categoryId: ctx.categoryIdByKey('people'), source: 'HEURISTIC', confidence: 0.6, detail: `${person === 'BIZUM' ? 'Bizum' : 'Transferencia'} con otra persona: cuenta como gasto (puedes moverlo a su categoría real)`, ruleId: null };
   }
 
   return { categoryId: ctx.categoryIdByKey('uncategorized'), source: 'UNKNOWN', confidence: 0, detail: 'Ninguna regla coincide', ruleId: null };

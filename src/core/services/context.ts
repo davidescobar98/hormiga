@@ -5,6 +5,7 @@ import { GoalsRepo, IncomeRepo, RecommendationsRepo, RecurringRepo } from '../db
 import { SettingsRepo } from '../db/settingsRepo';
 import { TransactionsRepo } from '../db/transactionsRepo';
 import { AssetsRepo, PotsRepo } from '../db/wealthRepo';
+import { AccountsRepo } from '../db/accountsRepo';
 
 /** Values are sanitized by the logger (sensitive keys redacted, IBAN/cards/emails/tokens masked). */
 export type LogData = Record<string, unknown>;
@@ -34,6 +35,7 @@ export interface Repos {
   recommendations: RecommendationsRepo;
   pots: PotsRepo;
   assets: AssetsRepo;
+  accounts: AccountsRepo;
 }
 
 export function createRepos(db: Database, now: () => Date): Repos {
@@ -52,6 +54,7 @@ export function createRepos(db: Database, now: () => Date): Repos {
     recommendations: new RecommendationsRepo(db, now),
     pots: new PotsRepo(db, now),
     assets: new AssetsRepo(db, now),
+    accounts: new AccountsRepo(db, now),
   };
 }
 

@@ -55,6 +55,9 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
       if (patch.theme) nativeTheme.themeSource = patch.theme;
       const next = c().repos.settings.updateSettings(patch);
       if (patch.autoUpdate) updater.start();
+      if (patch.profile) {
+        if (c().accounts.refreshTransfers() > 0) refreshAfterDataChange();
+      }
       return next;
     },
 
@@ -337,6 +340,38 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
       return r;
     },
     'wealth.overview': () => c().wealth.wealthOverview(),
+    'accounts.list': () => c().accounts.list(),
+    'accounts.update': (input) => {
+      c().accounts.update(input);
+      refreshAfterDataChange();
+      return c().accounts.list();
+    },
+    'accounts.setBalance': ({ id, balanceCents, date }) => {
+      c().accounts.setBalance(id, balanceCents, date);
+      emitChanged('accounts');
+      return c().accounts.list();
+    },
+    'accounts.createManual': (input) => {
+      c().accounts.createManual(input);
+      refreshAfterDataChange();
+      return c().accounts.list();
+    },
+    'accounts.merge': ({ fromId, intoId }) => {
+      c().accounts.merge(fromId, intoId);
+      refreshAfterDataChange();
+      return c().accounts.list();
+    },
+    'accounts.deleteManual': ({ id }) => {
+      c().accounts.deleteManual(id);
+      refreshAfterDataChange();
+      return c().accounts.list();
+    },
+    'accounts.counterparties': () => c().accounts.counterparties(),
+    'accounts.decideCounterparty': (input) => {
+      const changed = c().accounts.decideCounterparty(input);
+      refreshAfterDataChange();
+      return { changed };
+    },
     'wealth.saveAsset': (input) => {
       const assetId = c().repos.assets.save(input);
       emitChanged('wealth');

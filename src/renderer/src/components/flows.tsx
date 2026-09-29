@@ -427,7 +427,7 @@ export function CandidatesReview({ candidates, onImported }: { candidates: Email
 }
 
 export function processedLabel(s: string): string {
-  return ({ imported: 'Importado', duplicate: 'Ya importado', needs_review: 'En revisión', password_required: 'Requiere contraseña', failed: 'Error', not_statement: 'No es extracto', skipped: 'Sin PDF' } as Record<string, string>)[s] ?? s;
+  return ({ imported: 'Importado', duplicate: 'Ya importado', needs_review: 'En revisión', password_required: 'Requiere contraseña', failed: 'Error', not_statement: 'Ignorado (no es un extracto)', skipped: 'Sin PDF' } as Record<string, string>)[s] ?? s;
 }
 
 // ───────── Recommendations ─────────

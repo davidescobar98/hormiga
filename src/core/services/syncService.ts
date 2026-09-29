@@ -274,7 +274,8 @@ export class SyncService {
         } else if (status === 'duplicate') summary.duplicates++;
         else if (status === 'needs_review') summary.needsReview++;
         else if (status === 'password_required') summary.passwordRequired++;
-        else if (status === 'failed' || status === 'not_statement') {
+        else if (status === 'not_statement') summary.ignored++;
+        else if (status === 'failed') {
           summary.failed++;
           summary.errors.push({ code: outcome.errorCode ?? 'INTERNAL', message: outcome.message, subject: meta.subject });
         }
@@ -299,7 +300,7 @@ export class SyncService {
   private newSummary(trigger: SyncSummary['trigger']): SyncSummary {
     return {
       startedAt: this.now().toISOString(), finishedAt: '', trigger, scanned: 0, detected: 0, imported: 0, duplicates: 0,
-      needsReview: 0, passwordRequired: 0, failed: 0, newTransactions: 0, pendingCandidates: 0, errors: [], message: '',
+      needsReview: 0, passwordRequired: 0, failed: 0, ignored: 0, newTransactions: 0, pendingCandidates: 0, errors: [], message: '',
     };
   }
 
@@ -349,6 +350,7 @@ function describe(s: SyncSummary): string {
   if (s.passwordRequired) parts.push(`${s.passwordRequired} protegido(s) con contraseña`);
   if (s.duplicates) parts.push(`${s.duplicates} ya importado(s)`);
   if (s.failed) parts.push(`${s.failed} con errores`);
+  if (s.ignored) parts.push(`${s.ignored} adjunto(s) que no eran extractos (ignorados)`);
   if (s.pendingCandidates) parts.push(`${s.pendingCandidates} posible(s) para revisar`);
   return parts.length ? `${parts.join(', ')}.` : 'No hay documentos nuevos.';
 }

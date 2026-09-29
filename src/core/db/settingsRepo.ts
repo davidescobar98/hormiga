@@ -1,4 +1,4 @@
-import type { AppSettings, DetectionConfig, SyncSummary } from '../../shared/types';
+import type { AppSettings, DetectionConfig, FinancialProfile, SyncSummary } from '../../shared/types';
 import type { Database } from './database';
 
 export const DEFAULT_DETECTION: DetectionConfig = {
@@ -7,6 +7,17 @@ export const DEFAULT_DETECTION: DetectionConfig = {
   subjectKeywords: ['extracto', 'resumen', 'factura', 'liquidación', 'liquidacion', 'movimientos', 'tarjeta', 'documento', 'correspondencia'],
   filenameKeywords: ['extracto', 'resumen', 'factura', 'liquidacion', 'movimientos', 'tarjeta', 'bbva'],
   minScore: 60,
+};
+
+export const DEFAULT_PROFILE: FinancialProfile = {
+  ownerNames: [],
+  household: null,
+  partnerName: null,
+  dependents: 0,
+  housing: null,
+  incomeStability: null,
+  priorityCategoryIds: [],
+  goals: [],
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -20,6 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   marketDataEnabled: false,
   lastSeenVersion: null,
   autoUpdate: true,
+  profile: DEFAULT_PROFILE,
 };
 
 /** Non-secret key/value settings stored as JSON. Secrets (OAuth tokens) never go here. */
@@ -56,6 +68,7 @@ export class SettingsRepo {
       ...DEFAULT_SETTINGS,
       ...stored,
       detection: { ...DEFAULT_DETECTION, ...(stored.detection ?? {}) },
+      profile: { ...DEFAULT_PROFILE, ...(stored.profile ?? {}) },
     };
   }
 
@@ -65,6 +78,7 @@ export class SettingsRepo {
       ...current,
       ...patch,
       detection: { ...current.detection, ...(patch.detection ?? {}) },
+      profile: { ...current.profile, ...(patch.profile ?? {}) },
     };
     this.setRaw('app', next);
     return next;

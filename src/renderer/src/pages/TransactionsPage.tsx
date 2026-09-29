@@ -22,6 +22,7 @@ export function TransactionsPage({ initial }: { initial: NavParams }) {
     categoryId: initial.categoryId,
     uncategorizedOnly: initial.uncategorizedOnly,
     merchantId: initial.merchantId,
+    accountId: initial.accountId,
     from: initial.from,
     to: initial.to,
   });
@@ -33,6 +34,7 @@ export function TransactionsPage({ initial }: { initial: NavParams }) {
 
   const page = useQuery(() => api('transactions.list', query), [JSON.stringify(query)]);
   const categories = useQuery(() => api('categories.list'), []);
+  const accounts = useQuery(() => api('accounts.list'), []);
   const [openId, setOpenId] = useState<number | null>(null);
   const [suggestion, setSuggestion] = useState<RuleSuggestion | null>(null);
   const invalidate = useInvalidate();
@@ -52,7 +54,7 @@ export function TransactionsPage({ initial }: { initial: NavParams }) {
   };
 
   const cats = (categories.data ?? []) as Category[];
-  const hasFilters = !!(query.search || query.categoryId || query.type || query.from || query.to || query.uncategorizedOnly || query.merchantId || query.onlyExcluded);
+  const hasFilters = !!(query.search || query.categoryId || query.type || query.from || query.to || query.uncategorizedOnly || query.merchantId || query.accountId || query.onlyExcluded);
   const sortIndicator = (s: TransactionSort) => (query.sort === s ? (query.dir === 'asc' ? 'ascending' : 'descending') : undefined);
 
   return (
@@ -77,6 +79,12 @@ export function TransactionsPage({ initial }: { initial: NavParams }) {
             <option value="">Todas las categorías</option>
             {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {(accounts.data?.length ?? 0) > 1 && (
+            <select className="select compact" aria-label="Filtrar por cuenta" value={query.accountId ?? ''} onChange={(e) => setQuery((q) => ({ ...q, accountId: e.target.value ? Number(e.target.value) : undefined, offset: 0 }))}>
+              <option value="">Todas las cuentas</option>
+              {accounts.data!.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
           <select className="select compact" aria-label="Filtrar por tipo" value={query.type ?? ''} onChange={(e) => setQuery((q) => ({ ...q, type: (e.target.value || undefined) as TransactionType | undefined, offset: 0 }))}>
             <option value="">Todos los tipos</option>
             {TRANSACTION_TYPES.map((t) => <option key={t} value={t}>{TRANSACTION_TYPE_LABELS[t]}</option>)}
@@ -132,7 +140,10 @@ export function TransactionsPage({ initial }: { initial: NavParams }) {
                         {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </td>
-                    <td><span className="small muted" title={t.classificationDetail ?? ''}>{CLASSIFICATION_SOURCE_LABELS[t.classificationSource]}</span></td>
+                    <td>
+                      <span className="small muted" title={t.classificationDetail ?? ''}>{CLASSIFICATION_SOURCE_LABELS[t.classificationSource]}</span>
+                      {t.accountName && (accounts.data?.length ?? 0) > 1 && <div className="cell-sub">{t.accountName}</div>}
+                    </td>
                     <td className="right"><TxAmount cents={t.amountCents} /></td>
                   </tr>
                 ))}
@@ -306,6 +317,8 @@ function TransactionDetailDialog({ id, categories, onClose, onSuggestion }: { id
                 </>
               ) : '—'}
             </dd>
+            <dt>Cuenta</dt>
+            <dd>{t.accountName ?? '—'}{t.transferMatchId ? <div className="muted small">Emparejado con el movimiento contrario en tu otra cuenta: no cuenta como gasto ni ingreso.</div> : null}</dd>
             <dt>Recurrencia</dt>
             <dd>{t.recurringStatus ? RECURRING_STATUS_LABELS[t.recurringStatus] : 'No detectado como recurrente'}</dd>
           </dl>

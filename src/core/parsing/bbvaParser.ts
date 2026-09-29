@@ -15,7 +15,8 @@ import type { ExtractedDocument, ParsedStatement, RawTransaction, SignConvention
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?`;
 const DATE_TEXT = String.raw`\d{1,2}[\s-](?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|SEPT|OCT|NOV|DIC)[A-Z]*[\s-]\d{2,4}`;
 const ANY_DATE = `(?:${DATE}|${DATE_TEXT})`;
-const AMOUNT = String.raw`[-+−]?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?-?(?:\s?(?:€|EUR))?|[-+−]?\s?\d+,\d{2}\s?-?(?:\s?(?:€|EUR))?`;
+// Currency may be separated by a column gap ("13.785,13  EUR").
+const AMOUNT = String.raw`[-+−]?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?-?(?:\s*(?:€|EUR))?|[-+−]?\s?\d+,\d{2}\s?-?(?:\s*(?:€|EUR))?`;
 
 export const BBVA_FORMAT = {
   identity: [/\bBBVA\b/i, /BANCO BILBAO VIZCAYA ARGENTARIA/i],
@@ -48,7 +49,7 @@ export const BBVA_FORMAT = {
 };
 
 function stripCurrency(s: string): string {
-  return s.replace(/\s?(€|EUR)$/i, '').trim();
+  return s.replace(/\s*(€|EUR)$/i, '').trim();
 }
 
 export class BbvaStatementParser implements StatementParser {
@@ -120,11 +121,21 @@ export class BbvaStatementParser implements StatementParser {
     }
     if (declared === null && charges !== null) declared = Math.abs(charges) - Math.abs(credits ?? 0);
 
-    const accountHintMatch = BBVA_FORMAT.maskedNumber.exec(text);
+    // Only the header identifies the account: masked numbers inside movements are cards or references.
+    const firstMovement = all.findIndex((l) => BBVA_FORMAT.transactionLine.test(l.trim()));
+    const header = (firstMovement === -1 ? all : all.slice(0, firstMovement)).join('\n');
+    const accountHintMatch = BBVA_FORMAT.maskedNumber.exec(header);
     const accountHint = accountHintMatch ? accountHintMatch[1]! : null;
 
     // ── Movements ──
-    const inferYear = makeYearInference(periodStart, periodEnd);
+    // Without a printed period, "dd/mm" dates take their year from the latest full date printed in the document
+    // (issue date, value dates…).
+    let yearRef = periodEnd ?? periodStart;
+    if (!yearRef) {
+      const full = [...text.matchAll(/\b(\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\b/g)].map((m) => parseSpanishDate(m[1]!)).filter((d): d is IsoDate => !!d).sort();
+      yearRef = full.at(-1) ?? null;
+    }
+    const inferYear = makeYearInference(periodStart, periodEnd ?? yearRef);
     const transactions: RawTransaction[] = [];
     let unrecognised = 0;
     doc.pages.forEach((lines, pageIdx) => {

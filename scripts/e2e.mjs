@@ -51,6 +51,7 @@ const step = async (name, fn) => {
     results.push({ name, ok: false, err: String(err?.message ?? err).split('\n')[0] });
     await page?.screenshot({ path: join(shots, 'fail.png'), fullPage: true }).catch(() => {});
     console.log(`✘ ${name}: ${err?.message ?? err}`);
+    if (typeof errors !== 'undefined' && errors.length) console.log('Errores del renderer:', errors.slice(-5).join(' | '));
     throw err;
   }
 };
@@ -161,7 +162,7 @@ try {
   });
 
   await step('transaction detail shows traceability', async () => {
-    await page.getByRole('row', { name: /Mercadona/ }).first().click();
+    await page.getByRole('row', { name: /Mercadona/ }).first().getByRole('cell').first().click();
     const dlg = page.getByRole('dialog');
     await dlg.getByText('Descripción original del banco').waitFor();
     const t = await dlg.innerText();
@@ -213,6 +214,37 @@ try {
     await page.getByRole('dialog').getByLabel('Objetivo', { exact: true }).fill('6.000');
     await page.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
     await page.getByRole('article', { name: 'Coche nuevo' }).waitFor();
+  });
+
+  await step('accounts: balances, manual remunerated account and transfer review', async () => {
+    await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
+    await page.getByRole('heading', { name: 'Cuentas', exact: true }).waitFor();
+    await page.getByRole('article', { name: 'Cuenta nómina (demo)' }).waitFor();
+    await page.getByRole('article', { name: 'Cuenta remunerada (demo)' }).getByText('Destino de tus traspasos').waitFor();
+    await page.getByRole('heading', { name: 'Revisa tus transferencias' }).waitFor();
+    await page.screenshot({ path: join(shots, '14-accounts.png'), fullPage: true });
+    await page.locator('.page-header').getByRole('button', { name: 'Añadir cuenta manual' }).click();
+    const d = page.getByRole('dialog');
+    await d.getByLabel('Nombre', { exact: true }).fill('Hucha naranja');
+    await d.getByLabel('Saldo', { exact: true }).fill('1.000');
+    await d.getByLabel('Rentabilidad (TAE, opcional)').fill('2');
+    await d.getByRole('button', { name: 'Guardar' }).click();
+    await page.getByRole('article', { name: 'Hucha naranja' }).getByText(/1\.000,00/).waitFor();
+  });
+
+  await step('profile tailors the emergency cushion', async () => {
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('heading', { name: 'Tu perfil' }).waitFor();
+    await page.getByLabel('Tus ingresos').selectOption('self_employed');
+    await page.getByLabel('Personas a tu cargo').fill('1');
+    await page.getByRole('button', { name: 'Guardar perfil' }).click();
+    await page.getByText(/Perfil guardado/).waitFor();
+    await page.getByRole('button', { name: 'Ahorro' }).first().click();
+    await page.getByRole('heading', { name: 'Adónde va tu dinero' }).waitFor();
+    await page.getByRole('heading', { name: 'Referencia 50/30/20' }).waitFor();
+    await page.getByText('Para ti: 7 meses de gasto esencial').waitFor();
+    await page.getByRole('heading', { name: 'Sugerencias para ahorrar' }).waitFor();
+    await page.screenshot({ path: join(shots, '15-savings-plus.png'), fullPage: true });
   });
 
   await step('wealth and simulator', async () => {
