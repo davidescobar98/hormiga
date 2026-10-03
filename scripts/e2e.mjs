@@ -352,6 +352,61 @@ try {
     await card.getByText(/Activa los datos de mercado/).waitFor();
   });
 
+  await step('Previsión: balance, income, upcoming payments and savings plan', async () => {
+    await page.getByRole('button', { name: 'Previsión' }).click();
+    await page.getByRole('heading', { name: 'Previsión', level: 1 }).waitFor();
+    await page.getByText('Cómo acabará el mes').waitFor();
+    await page.getByText('Próximos 30 días').first().waitFor();
+    await page.getByRole('region', { name: 'Tu plan de ahorro' }).waitFor();
+    await page.screenshot({ path: join(shots, '18-forecast.png'), fullPage: true });
+  });
+
+  await step('assistant answers with local data', async () => {
+    await page.getByRole('button', { name: 'Pregunta a Hormiga' }).click();
+    const panel = page.getByRole('complementary', { name: 'Pregunta a Hormiga' });
+    await panel.getByLabel('Tu pregunta').fill('¿Cuánto he ahorrado este año?');
+    await panel.getByRole('button', { name: 'Preguntar' }).click();
+    await panel.getByText(/has ahorrado|No tengo ingresos/).waitFor();
+    await panel.getByLabel('Tu pregunta').fill('se me desconecta gmail');
+    await panel.getByRole('button', { name: 'Preguntar' }).click();
+    await panel.getByText(/7 días/).first().waitFor();
+    await page.screenshot({ path: join(shots, '19-assistant.png') });
+    await panel.getByRole('button', { name: 'Cerrar' }).click();
+  });
+
+  await step('Ctrl+K jumps to help', async () => {
+    await page.keyboard.press('Control+k');
+    await page.getByLabel('Buscar página, ayuda o preguntar').fill('Ayuda');
+    await page.keyboard.press('Enter');
+    await page.getByRole('heading', { name: 'Ayuda', level: 1 }).waitFor();
+    await page.getByRole('article', { name: 'Conectar Gmail y que no se desconecte' }).waitFor();
+    await page.screenshot({ path: join(shots, '20-help.png') });
+  });
+
+  await step('audit: «Comprobar mis números»', async () => {
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('button', { name: 'Comprobar ahora' }).click();
+    await page.getByText('Ahorro = ingresos − gastos.').waitFor();
+    // The demo data is consistent: no check may fail.
+    await page.getByText(/^Todo cuadra/).first().waitFor();
+    await page.screenshot({ path: join(shots, '21-audit.png'), fullPage: true });
+  });
+
+  await step('profiles: add a second person (separate data)', async () => {
+    await page.getByRole('button', { name: 'Añadir perfil' }).click();
+    const d = page.getByRole('dialog');
+    await d.getByLabel('Nombre').fill('Ana');
+    await d.getByRole('button', { name: 'Guardar' }).click();
+    await page.getByRole('button', { name: 'Cambiar a este' }).waitFor();
+    const profilesFile = JSON.parse(readFileSync(join(userData, 'profiles.json'), 'utf8'));
+    if (profilesFile.profiles.length !== 2 || profilesFile.profiles[1].dir === profilesFile.profiles[0].dir) throw new Error('profile not created with its own folder');
+    await page.screenshot({ path: join(shots, '22-profiles.png') });
+    // Whoever is already using Hormiga is not asked «¿Quién usa Hormiga?» again until the next start.
+    await page.reload();
+    await page.getByRole('button', { name: 'Resumen' }).waitFor();
+    if (await page.getByText('¿Quién usa Hormiga?').count()) throw new Error('profile picker shown mid-session');
+  });
+
   await step('export CSV', async () => {
     const out = join(work, 'movimientos.csv');
     await page.getByRole('button', { name: 'Ajustes' }).click();

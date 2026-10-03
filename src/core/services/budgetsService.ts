@@ -1,7 +1,7 @@
 import type { AlertDTO, AlertKind, BudgetsOverview } from '../../shared/types';
 import { addDays, addMonths, firstDayOfMonth, lastDayOfMonth, monthOf, todayIso, type IsoDate, type YearMonth } from '../../shared/dates';
 import { formatCents, formatBp } from '../../shared/money';
-import { budgetLine, suggestBudget } from '../domain/budgets';
+import { budgetLine, suggestBudget, typicalMonthly } from '../domain/budgets';
 import { AppError } from '../errors';
 import type { AnalyticsService } from './analyticsService';
 import type { Repos } from './context';
@@ -25,6 +25,8 @@ export class BudgetsService {
   pendingTransferReviews: () => number = () => 0;
   /** Set by the composition root: buy/sell signals on stocks. */
   stockAlerts: () => NewAlert[] = () => [];
+  /** Set by the composition root: low balance ahead, spending pace, seasonal months. */
+  forecastAlerts: () => NewAlert[] = () => [];
 
   private today(): IsoDate {
     return todayIso(this.now());
@@ -47,12 +49,16 @@ export class BudgetsService {
     const today = this.today();
     const month = requested ?? monthOf(today);
     const spent = this.spentByCategory(month);
-    // Averages from the 3 complete months before the one shown.
-    const history = [1, 2, 3].map((k) => this.spentByCategory(addMonths(month, -k)));
-    const avgOf = (id: number) => {
-      const values = history.map((h) => h.get(id) ?? 0);
-      return values.some((v) => v > 0) ? Math.round(values.reduce((t, v) => t + v, 0) / values.length) : null;
-    };
+    // Averages from the 3 complete months before the one shown (a month whose last days are not imported yet does
+    // not count: e.g. a mortgage charged on the 30th would otherwise lower the average).
+    const coverage = this.analytics.coverageDate();
+    const prior: YearMonth[] = [];
+    for (let k = 1; prior.length < 3 && k <= 6; k++) {
+      const m = addMonths(month, -k);
+      if (this.analytics.isMonthComplete(m, coverage)) prior.push(m);
+    }
+    const history = (prior.length ? prior : [1, 2, 3].map((k) => addMonths(month, -k))).map((m) => this.spentByCategory(m));
+    const avgOf = (id: number) => typicalMonthly(history.map((h) => h.get(id) ?? 0));
     const suggestOf = (id: number) => suggestBudget(history.map((h) => h.get(id) ?? 0));
     const categories = new Map(this.repos.categories.list().map((c) => [c.id, c]));
     const budgets = this.repos.db.all<{ category_id: number; amount_cents: number }>('SELECT category_id, amount_cents FROM budgets');
@@ -82,6 +88,13 @@ export class BudgetsService {
       totalSpentCents: lines.reduce((t, l) => t + l.spentCents, 0),
       suggestions,
     };
+  }
+
+  /** Several budgets at once (e.g. from the savings plan). */
+  setMany(items: { categoryId: number; amountCents: number }[]): void {
+    this.repos.db.transaction(() => {
+      for (const i of items) this.set(i.categoryId, i.amountCents);
+    });
   }
 
   set(categoryId: number, amountCents: number | null): void {
@@ -186,6 +199,11 @@ export class BudgetsService {
     if (pending > 0) {
       out.push({ key: `transfers:${pending}:${month}`, kind: 'transfer_review', title: 'Confirma tus transferencias grandes', body: `${pending === 1 ? 'Hay 1 beneficiario' : `Hay ${pending} beneficiarios`} sin revisar. Mientras tanto se tratan como dinero movido a otra cuenta tuya.`, page: 'accounts', section: 'transfers' });
     }
+    const gmailFailedAt = this.repos.settings.getRaw<string>('email.authErrorAt');
+    if (gmailFailedAt) {
+      out.push({ key: `gmail:${gmailFailedAt.slice(0, 10)}`, kind: 'gmail', title: 'Gmail se ha desconectado', body: 'Hormiga no puede buscar tus extractos. Ve a Ajustes → Cuenta de correo y pulsa «Volver a conectar»: no hace falta crear ni pegar nada nuevo.', page: 'settings', section: 'email' });
+    }
+    out.push(...this.forecastAlerts());
     out.push(...this.stockAlerts());
     return out;
   }

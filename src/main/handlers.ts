@@ -1,3 +1,4 @@
+import type { ProfileStore } from './profiles';
 import { app, dialog, nativeTheme, shell, type BrowserWindow } from 'electron';
 import { copyFile, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -20,7 +21,7 @@ export type Handlers = { [C in Channel]: Handler<C> };
 const HELP_URLS: Record<HelpTopic, string> = {
   'google-cloud-console': 'https://console.cloud.google.com/apis/credentials',
   'gmail-api': 'https://console.cloud.google.com/apis/library/gmail.googleapis.com',
-  'oauth-consent': 'https://console.cloud.google.com/apis/credentials/consent',
+  'oauth-consent': 'https://console.cloud.google.com/auth/audience',
 };
 
 export const RESTORE_CONFIRMATION = 'RESTAURAR';
@@ -29,7 +30,28 @@ export const CLEAR_CONFIRMATION = 'BORRAR';
 
 const cancelled = (message = 'Operación cancelada.'): FileActionResult => ({ ok: false, cancelled: true, message, path: null });
 
-export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | null, emitChanged: (reason: string) => void, updater: Updater, lock: AppLock, onAlertsChanged: () => void = () => {}): Handlers {
+export function createHandlers(
+  rt: Runtime,
+  getWindow: () => BrowserWindow | null,
+  emitChanged: (reason: string) => void,
+  updater: Updater,
+  lock: AppLock,
+  onAlertsChanged: () => void = () => {},
+  onDesktopChanged: (d: { openAtLogin: boolean; trayOnClose: boolean }) => void = () => {},
+  profiles: { store: ProfileStore; chosen: () => boolean; markChosen?: () => void; switchTo: (id: string) => void } | null = null,
+): Handlers {
+  const pstore = () => {
+    if (!profiles) throw new AppError('VALIDATION', 'Perfiles no disponibles.');
+    return profiles.store;
+  };
+  const perr = <T,>(fn: () => T): T => {
+    try {
+      return fn();
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw new AppError('VALIDATION', (err as Error).message);
+    }
+  };
   const c = () => rt.core;
   const win = () => getWindow() ?? undefined;
   const refreshAfterDataChange = () => {
@@ -51,11 +73,42 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
     'app.installUpdate': () => ({ ok: updater.install() }),
     'app.completeOnboarding': () => c().repos.settings.updateSettings({ onboardingCompleted: true }),
 
+    'profiles.list': () => {
+      const s = pstore().list(profiles!.chosen());
+      // Whoever is already inside Hormiga in this session has chosen: adding a profile later must not ask again until the next start.
+      if (!s.mustChoose) profiles!.markChosen?.();
+      return s;
+    },
+    'profiles.create': (input) => perr(() => {
+      pstore().create(input);
+      return pstore().list(profiles!.chosen());
+    }),
+    'profiles.update': ({ id, ...patch }) => perr(() => {
+      pstore().update(id, patch);
+      return pstore().list(profiles!.chosen());
+    }),
+    'profiles.switch': ({ id }) => perr(() => {
+      profiles!.switchTo(id);
+      return pstore().list(profiles!.chosen());
+    }),
+    'profiles.setAskOnStart': ({ value }) => perr(() => {
+      pstore().setAskOnStart(value);
+      return pstore().list(profiles!.chosen());
+    }),
+    'profiles.delete': async ({ id }) => {
+      const p = pstore().list(true).profiles.find((x) => x.id === id);
+      if (!p) throw new AppError('NOT_FOUND', 'Perfil no encontrado.');
+      const ok = await confirmNative(`Se borrará el perfil «${p.name}» con todos sus datos.`, 'Movimientos, documentos, metas, patrimonio, conexión con Gmail y copias de seguridad de ese perfil. Los demás perfiles no se tocan. No se puede deshacer.', 'Borrar perfil');
+      if (!ok) return pstore().list(profiles!.chosen());
+      perr(() => pstore().remove(id));
+      return pstore().list(profiles!.chosen());
+    },
     'settings.get': () => c().repos.settings.getSettings(),
     'settings.update': (patch) => {
       if (patch.theme) nativeTheme.themeSource = patch.theme;
       const next = c().repos.settings.updateSettings(patch);
       if (patch.autoUpdate) updater.start();
+      if (patch.desktop) onDesktopChanged(next.desktop);
       if (patch.profile) {
         if (c().accounts.refreshTransfers() > 0) refreshAfterDataChange();
       }
@@ -179,7 +232,7 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
       await c().gmailAuth.clearClientConfig();
       return c().sync.status();
     },
-    'email.connect': () => c().sync.connect(),
+    'email.connect': (input) => c().sync.connect(input?.send ?? false),
     'email.disconnect': () => c().sync.disconnect(),
     'email.scan': (input) => c().sync.scan(input?.lookbackMonths),
     'email.importSelected': ({ messageIds }) => c().sync.importSelected(messageIds),
@@ -352,7 +405,7 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
     'alerts.list': () => c().budgets.alerts(),
     'alerts.markRead': (input) => {
       c().budgets.markRead(input?.key);
-      emitChanged('alerts');
+      emitChanged('alerts.read');
       return { ok: true };
     },
     'lock.status': () => lock.status(),
@@ -439,6 +492,18 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
     'wealth.earlyRepayment': ({ assetId, date, amountCents, strategy }) => c().wealth.earlyRepayment(assetId, date, amountCents, strategy),
     'market.search': ({ query }) => c().wealth.marketSearch(query),
     'market.returns': ({ symbol }) => c().wealth.marketReturns(symbol),
+    'forecast.overview': () => c().forecast.overview(),
+    'budgets.setMany': ({ items }) => {
+      c().budgets.setMany(items);
+      onAlertsChanged();
+      return c().budgets.overview();
+    },
+    'assistant.ask': ({ question }) => c().assistant.ask(question),
+    'data.audit': () => c().audit.run(),
+    'notify.testEmail': async () => {
+      await c().notify.sendTest();
+      return { ok: true };
+    },
     'stocks.overview': () => c().stocks.overview(),
     'stocks.refresh': async (input) => {
       const r = await c().stocks.refresh(input?.force ?? false);

@@ -297,6 +297,11 @@ export interface EmailStatus {
   lastSync: SyncSummary | null;
   lastDocument: { fileName: string; importedAt: string } | null;
   message: string | null;
+  /** Permission to send your own alerts to your own address. */
+  canSend: boolean;
+  authorizedAt: string | null;
+  /** The authorization stopped working ~7 days after granting it: the Cloud project is probably in «Testing». */
+  weeklyExpiryLikely: boolean;
 }
 
 export interface EmailCandidate {
@@ -352,7 +357,20 @@ export interface AppSettings {
   /** Optional personal context that tailors suggestions. Stored only on this computer. */
   profile: FinancialProfile;
   /** Windows notifications for alerts (alerts are always listed inside the app). */
-  notifications: { enabled: boolean };
+  notifications: {
+    /** Windows notifications. */
+    enabled: boolean;
+    /** Also email important alerts to your own Gmail address (needs the send permission). */
+    email: boolean;
+    /** Include amounts in emails (off: only what happened, see the app for figures). */
+    emailAmounts: boolean;
+    /** Monday summary of your week (Windows notification, and email if enabled). */
+    weeklySummary: boolean;
+    /** Warn when your current account is expected to fall below this balance. */
+    lowBalanceCents: number;
+  };
+  /** Desktop behaviour (installed app). */
+  desktop: { trayOnClose: boolean; openAtLogin: boolean };
   /** While the app is open, look for new statements in Gmail every N hours (0 = only when opening). */
   syncIntervalHours: number;
   lock: { enabled: boolean; windowsHello: boolean; autoLockMinutes: number };
@@ -834,7 +852,7 @@ export interface BudgetsOverview {
   suggestions: { categoryId: number; name: string; averageCents: Cents; suggestedCents: Cents; kind: CategoryKind }[];
 }
 
-export type AlertKind = 'budget' | 'unusual_charge' | 'duplicate_charge' | 'price_increase' | 'upcoming_payment' | 'transfer_review' | 'sync' | 'stock_buy' | 'stock_sell';
+export type AlertKind = 'budget' | 'unusual_charge' | 'duplicate_charge' | 'price_increase' | 'upcoming_payment' | 'transfer_review' | 'sync' | 'stock_buy' | 'stock_sell' | 'low_balance' | 'spending_pace' | 'seasonal' | 'gmail';
 
 export interface AlertDTO {
   key: string;
@@ -1291,4 +1309,150 @@ export interface StocksRefreshResult {
   updated: number;
   failed: { symbol: string; message: string }[];
   overview: StocksOverview;
+}
+
+// ───────── Forecast (Previsión) ─────────
+
+export interface ForecastEventDTO {
+  date: IsoDate;
+  kind: 'income' | 'recurring';
+  label: string;
+  /** Signed: + money in, − money out. */
+  amountCents: Cents;
+  frequency: RecurringFrequency | null;
+}
+
+export interface SavingsLeverDTO {
+  id: string;
+  kind: 'category' | 'subscription' | 'fees' | 'price_increase';
+  title: string;
+  detail: string;
+  monthlyCents: Cents;
+  annualCents: Cents;
+  suggested: boolean;
+  categoryId: number | null;
+  targetCents: Cents | null;
+}
+
+export interface SeasonalPeakDTO {
+  month: YearMonth;
+  categoryId: number;
+  categoryName: string;
+  lastYearCents: Cents;
+  usualCents: Cents;
+  extraCents: Cents;
+}
+
+export interface BalanceForecast {
+  /** Day the projection starts from (your last imported movement, or today). */
+  startDate: IsoDate;
+  startCents: Cents;
+  accounts: string[];
+  points: { date: IsoDate; balanceCents: Cents; estimated: boolean }[];
+  min: { date: IsoDate; balanceCents: Cents };
+  end: { date: IsoDate; balanceCents: Cents };
+  lowThresholdCents: Cents;
+  risk: 'ok' | 'low' | 'negative';
+  payday: number | null;
+  /** Usual variable spending and transfers to your other accounts per day (cents, fractional). */
+  dailyVariableCents: number;
+  dailyTransfersCents: number;
+  explanation: string[];
+}
+
+export interface IncomeSourceDTO {
+  payer: string;
+  kind: 'payroll' | 'employer_variable' | 'other';
+  monthlyCents: Cents;
+  day: number | null;
+  monthsSeen: number;
+  last12Cents: Cents;
+  extraPays: { month: number; cents: Cents; day: number }[];
+  regular: boolean;
+}
+
+export interface ForecastOverview {
+  hasData: boolean;
+  /** Where your income comes from and what to expect (last 12 complete months). */
+  income: { sources: IncomeSourceDTO[]; expectedMonthlyCents: Cents; expectedYearCents: Cents };
+  today: IsoDate;
+  /** Date of your last imported movement. */
+  dataUntil: IsoDate | null;
+  /** Days without new movements (null when there is no data). */
+  staleDays: number | null;
+  balance: BalanceForecast | null;
+  /** Why there is no balance projection. */
+  balanceNote: string | null;
+  /** Expected income and recurring payments in the next 30 days. */
+  upcoming: ForecastEventDTO[];
+  monthEnd: Forecast | null;
+  seasonal: SeasonalPeakDTO[];
+  levers: SavingsLeverDTO[];
+  plan: {
+    baselineMonthlyCents: Cents | null;
+    baselineExplanation: string;
+    provisional: boolean;
+    emergencyTargetCents: Cents | null;
+    emergencyGapCents: Cents | null;
+    pots: { name: string; remainingCents: Cents }[];
+    budgetedCategoryIds: number[];
+  };
+}
+
+/** Settings change: nested groups can be updated partially. */
+export type SettingsPatch = Partial<Omit<AppSettings, 'notifications' | 'desktop' | 'stocks' | 'profile' | 'detection' | 'lock'>> & {
+  notifications?: Partial<AppSettings['notifications']>;
+  desktop?: Partial<AppSettings['desktop']>;
+  stocks?: Partial<AppSettings['stocks']>;
+  profile?: Partial<AppSettings['profile']>;
+  detection?: Partial<AppSettings['detection']>;
+  lock?: Partial<AppSettings['lock']>;
+};
+
+// ───────── Assistant ─────────
+
+export interface AssistantAnswer {
+  text: string;
+  facts: { label: string; value: string }[];
+  actions: { label: string; page: string; params?: Record<string, string | number | boolean | undefined> }[];
+  suggestions: string[];
+}
+
+// ───────── Number audit ─────────
+
+export interface AuditCheck {
+  id: string;
+  label: string;
+  status: 'ok' | 'info' | 'warning' | 'error';
+  detail: string;
+  /** Page where to fix it. */
+  page?: string;
+  /** One-click fix offered next to the warning (the person decides). */
+  fix?: { kind: 'delete_rules'; ruleIds: number[]; label: string };
+}
+
+export interface AuditReport {
+  ranAt: string;
+  checks: AuditCheck[];
+  errors: number;
+  warnings: number;
+}
+
+// ───────── Profiles ─────────
+
+export interface ProfileDTO {
+  id: string;
+  name: string;
+  color: string;
+  /** Small photo as a data URL (stored only on this computer). */
+  photo: string | null;
+  createdAt: string;
+}
+
+export interface ProfilesState {
+  profiles: ProfileDTO[];
+  activeId: string;
+  askOnStart: boolean;
+  /** Show "who is using Hormiga?" before loading anything. */
+  mustChoose: boolean;
 }

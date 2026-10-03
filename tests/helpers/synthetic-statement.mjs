@@ -19,6 +19,9 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 /** @param {StatementSpec} spec @returns {Promise<Uint8Array>} */
 export async function buildStatementPdf(spec) {
   const doc = await PDFDocument.create();
+  // Fixed metadata: the same statement must always produce the same bytes (duplicate detection by hash).
+  doc.setCreationDate(new Date('2026-01-01T00:00:00Z'));
+  doc.setModificationDate(new Date('2026-01-01T00:00:00Z'));
   doc.setTitle('Documento ficticio de pruebas');
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -101,6 +104,9 @@ export async function buildStatementPdf(spec) {
  */
 export async function buildWebMovementsPdf(spec) {
   const doc = await PDFDocument.create();
+  // Fixed metadata: the same statement must always produce the same bytes (duplicate detection by hash).
+  doc.setCreationDate(new Date('2026-01-01T00:00:00Z'));
+  doc.setModificationDate(new Date('2026-01-01T00:00:00Z'));
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const size = 8;
   const pages = spec.pages.map(() => doc.addPage([595, 842]));
@@ -168,6 +174,9 @@ export function sampleCardSpec(overrides = {}) {
  */
 export async function buildLinesPdf(pages) {
   const doc = await PDFDocument.create();
+  // Fixed metadata: the same statement must always produce the same bytes (duplicate detection by hash).
+  doc.setCreationDate(new Date('2026-01-01T00:00:00Z'));
+  doc.setModificationDate(new Date('2026-01-01T00:00:00Z'));
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const size = 8;
   for (const lines of pages) {

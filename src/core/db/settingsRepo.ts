@@ -1,4 +1,4 @@
-import type { AppSettings, DetectionConfig, FinancialProfile, SyncSummary } from '../../shared/types';
+import type { AppSettings, SettingsPatch, DetectionConfig, FinancialProfile, SyncSummary } from '../../shared/types';
 import type { Database } from './database';
 
 export const DEFAULT_DETECTION: DetectionConfig = {
@@ -32,7 +32,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastSeenVersion: null,
   autoUpdate: true,
   profile: DEFAULT_PROFILE,
-  notifications: { enabled: false },
+  notifications: { enabled: false, email: false, emailAmounts: true, weeklySummary: true, lowBalanceCents: 10000 },
+  desktop: { trayOnClose: true, openAtLogin: false },
   syncIntervalHours: 6,
   lock: { enabled: false, windowsHello: false, autoLockMinutes: 15 },
   principalAsSavings: true,
@@ -75,12 +76,13 @@ export class SettingsRepo {
       detection: { ...DEFAULT_DETECTION, ...(stored.detection ?? {}) },
       profile: { ...DEFAULT_PROFILE, ...(stored.profile ?? {}) },
       notifications: { ...DEFAULT_SETTINGS.notifications, ...(stored.notifications ?? {}) },
+      desktop: { ...DEFAULT_SETTINGS.desktop, ...(stored.desktop ?? {}) },
       lock: { ...DEFAULT_SETTINGS.lock, ...(stored.lock ?? {}) },
       stocks: { ...DEFAULT_SETTINGS.stocks, ...(stored.stocks ?? {}) },
     };
   }
 
-  updateSettings(patch: Partial<AppSettings>): AppSettings {
+  updateSettings(patch: SettingsPatch): AppSettings {
     const current = this.getSettings();
     const next: AppSettings = {
       ...current,
@@ -88,6 +90,7 @@ export class SettingsRepo {
       detection: { ...current.detection, ...(patch.detection ?? {}) },
       profile: { ...current.profile, ...(patch.profile ?? {}) },
       notifications: { ...current.notifications, ...(patch.notifications ?? {}) },
+      desktop: { ...current.desktop, ...(patch.desktop ?? {}) },
       lock: { ...current.lock, ...(patch.lock ?? {}) },
       stocks: { ...current.stocks, ...(patch.stocks ?? {}) },
     };

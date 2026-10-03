@@ -2,7 +2,7 @@ import { formatBp, ratioBp, type Cents } from '../../shared/money';
 import { buildSavingsInsights } from '../domain/savingsInsights';
 import { splitLoanPayments } from '../domain/loanSplit';
 import {
-  addMonths, firstDayOfMonth, lastDayOfMonth, monthOf, monthRange, todayIso, type IsoDate, type YearMonth,
+  addDays, addMonths, firstDayOfMonth, lastDayOfMonth, monthOf, monthRange, todayIso, type IsoDate, type YearMonth,
 } from '../../shared/dates';
 import type {
   AnalyticsRange, AnalyticsReport, Averages, CategoryBreakdown, CategoryKind, CategoryWithStats, Dashboard, IncomeMode,
@@ -181,6 +181,81 @@ export class AnalyticsService {
     return map;
   }
 
+  /**
+   * Everything the forecast needs from your history. Spending here is cash that leaves your accounts (the whole loan
+   * payment included, whatever the principal-as-savings setting), split into recurring and variable.
+   */
+  forecastBasis(): {
+    today: IsoDate;
+    lastComplete: YearMonth | null;
+    monthsWithData: Set<YearMonth>;
+    /** Non-recurring spending per month and category (recurring payments are separate levers). */
+    variableByCategory: Map<YearMonth, Map<number, Cents>>;
+    /** All spending per month and category (for seasonality). */
+    byCategory: Map<YearMonth, Map<number, Cents>>;
+    /** Average monthly variable (non-recurring) spending over the last 3 complete months. */
+    variableMonthlyCents: Cents | null;
+    expectedIncome: { cents: Cents; explanation: string };
+    incomes: { date: IsoDate; cents: Cents; description: string }[];
+    feesMonthlyCents: Cents;
+    dataUntil: IsoDate | null;
+  } {
+    const today = this.today();
+    const available = this.availableMonths();
+    const current = monthOf(today);
+    const coverage = this.coverageDate();
+    const complete = available.filter((m) => this.isMonthComplete(m, coverage));
+    const lastComplete = complete.length ? complete[complete.length - 1]! : null;
+    const from = addMonths(current, -26);
+    const rows = this.repos.db.all<{ month: string; category_id: number; net: number; rec: number }>(
+      `SELECT substr(t.date, 1, 7) AS month, t.category_id, -SUM(t.amount_cents) AS net,
+              -SUM(CASE WHEN EXISTS (SELECT 1 FROM recurring_expenses r WHERE r.merchant_id = t.merchant_id AND r.status <> 'dismissed') THEN t.amount_cents ELSE 0 END) AS rec
+       FROM transactions t JOIN categories c ON c.id = t.category_id
+       WHERE t.is_excluded = 0 AND c.excluded_from_spending = 0 AND t.type IN ${SPEND_TYPES_SQL} AND t.date >= ? AND t.date <= ?
+       GROUP BY month, t.category_id`,
+      firstDayOfMonth(from), today,
+    );
+    const variableByCategory = new Map<YearMonth, Map<number, Cents>>();
+    const byCategory = new Map<YearMonth, Map<number, Cents>>();
+    for (const r of rows) {
+      const put = (map: Map<YearMonth, Map<number, Cents>>, v: number) => {
+        const m = map.get(r.month) ?? new Map<number, Cents>();
+        m.set(r.category_id, v);
+        map.set(r.month, m);
+      };
+      put(byCategory, Number(r.net));
+      put(variableByCategory, Number(r.net) - Number(r.rec));
+    }
+    const last3 = lastComplete ? monthRange(addMonths(lastComplete, -2), lastComplete).filter((m) => available.includes(m)) : [];
+    const variableOf = (m: YearMonth) => [...(variableByCategory.get(m)?.values() ?? [])].reduce((t, v) => t + v, 0);
+    const variableMonthlyCents = last3.length ? Math.round(last3.reduce((t, m) => t + variableOf(m), 0) / last3.length) : null;
+    const data = this.load(addMonths(current, -4), current);
+    const expectedIncome = lastComplete ? this.expectedIncome(data, lastComplete, this.repos.settings.getSettings().incomeMode) : { cents: 0, explanation: 'Sin meses completos con datos.' };
+    const incomes = this.repos.db
+      .all<{ date: string; cents: number; d: string }>(
+        "SELECT date, amount_cents AS cents, description_normalized AS d FROM transactions WHERE is_excluded = 0 AND type = 'income' AND amount_cents > 0 AND date >= ? ORDER BY date",
+        addDays(today, -400),
+      )
+      .map((r) => ({ date: r.date, cents: Number(r.cents), description: r.d }));
+    const fees = this.repos.db.get<{ s: number | null }>(
+      "SELECT -SUM(t.amount_cents) AS s FROM transactions t JOIN categories c ON c.id = t.category_id WHERE t.is_excluded = 0 AND c.system_key = 'fees' AND t.date > ? AND t.date <= ?",
+      addDays(today, -365), today,
+    );
+    const until = this.repos.db.get<{ d: string | null }>('SELECT MAX(date) AS d FROM transactions WHERE is_excluded = 0');
+    return {
+      today,
+      lastComplete,
+      monthsWithData: new Set(available),
+      variableByCategory,
+      byCategory,
+      variableMonthlyCents,
+      expectedIncome,
+      incomes,
+      feesMonthlyCents: Math.max(0, Math.round(Number(fees?.s ?? 0) / 12)),
+      dataUntil: until?.d ?? null,
+    };
+  }
+
   activeRecurring(): RecurringDTO[] {
     return this.repos.recurring.list().filter((r) => r.status !== 'dismissed');
   }
@@ -210,9 +285,29 @@ export class AnalyticsService {
   }
 
   /** Last complete month with data at or before `ref` (the current calendar month is never complete). */
+  /**
+   * Last day your imported data surely covers: the latest movement, or the end of the latest imported statement.
+   * A month only counts as complete when this date reaches its end or a later month already has movements: a bill
+   * charged on the 30th that is not imported yet must not make that month look cheaper.
+   */
+  coverageDate(): IsoDate | null {
+    const r = this.repos.db.get<{ t: string | null; s: string | null }>(
+      'SELECT (SELECT MAX(date) FROM transactions WHERE is_excluded = 0) AS t, (SELECT MAX(period_end) FROM statements) AS s',
+    );
+    const t = r?.t ?? null;
+    const s = r?.s ?? null;
+    return t && s ? (t > s ? t : s) : t ?? s;
+  }
+
+  /** Whether a month is fully covered by your imported data (see coverageDate). */
+  isMonthComplete(m: YearMonth, coverage = this.coverageDate()): boolean {
+    if (!coverage || m >= monthOf(this.today())) return false;
+    return coverage >= lastDayOfMonth(m) || m < monthOf(coverage);
+  }
+
   private lastCompleteMonth(ref: YearMonth, available: YearMonth[]): YearMonth | null {
-    const current = monthOf(this.today());
-    const candidates = available.filter((m) => m <= ref && m < current);
+    const coverage = this.coverageDate();
+    const candidates = available.filter((m) => m <= ref && this.isMonthComplete(m, coverage));
     return candidates.length ? candidates[candidates.length - 1]! : null;
   }
 

@@ -1,7 +1,7 @@
 {
   "name": "hormiga",
   "productName": "Hormiga",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Finanzas personales locales a partir de los extractos BBVA que recibes por email.",
   "author": "David Escobar",

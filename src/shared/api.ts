@@ -1,5 +1,5 @@
 import type {
-  AnalyticsRange, AnalyticsReport, AppInfo, AppSettings, Category, CategoryKind, CategoryWithStats, CreateRuleInput,
+  AnalyticsRange, AnalyticsReport, AppInfo, AppSettings, SettingsPatch, Category, CategoryKind, CategoryWithStats, CreateRuleInput,
   CreateRuleResult, Dashboard, DataInfo, DocumentDTO, EmailStatus, FileActionResult, ImportOutcome, IncomeDTO,
   IncomeInput, Recommendation, RecurringDTO, RecurringStatus, ReviewDocument, ReviewItem, RuleDTO, SavingsGoalDTO,
   SavingsOverview, ScanResult, SyncProgressEvent, SyncSummary, TransactionDetail, TransactionPage, TransactionQuery,
@@ -7,7 +7,7 @@ import type {
   WealthOverview, AssetInput, AssetDTO, ValuationDTO, ValuationInput, LoanScheduleRow, EarlyRepaymentDTO, MarketQuoteDTO, MarketReturnsDTO, UpdateStatus,
   AccountDTO, AccountUpdate, ManualAccountInput, CounterpartySummary, CounterpartyDecisionInput,
   BudgetsOverview, AlertDTO, LockStatus, LockConfigInput, ExtraordinaryMovement,
-  StocksOverview, StocksRefreshResult, StockTradeInput,
+  StocksOverview, StocksRefreshResult, StockTradeInput, ForecastOverview, AssistantAnswer, AuditReport, ProfilesState,
 } from './types';
 import type { YearMonth } from './dates';
 
@@ -24,8 +24,15 @@ export interface ApiMap {
   'app.installUpdate': { input: Void; output: { ok: boolean } };
   'app.completeOnboarding': { input: Void; output: AppSettings };
 
+  'profiles.list': { input: Void; output: ProfilesState };
+  'profiles.create': { input: { name: string; color: string; photo: string | null }; output: ProfilesState };
+  'profiles.update': { input: { id: string; name?: string; color?: string; photo?: string | null }; output: ProfilesState };
+  'profiles.switch': { input: { id: string }; output: ProfilesState };
+  'profiles.setAskOnStart': { input: { value: boolean }; output: ProfilesState };
+  'profiles.delete': { input: { id: string }; output: ProfilesState };
+
   'settings.get': { input: Void; output: AppSettings };
-  'settings.update': { input: Partial<AppSettings>; output: AppSettings };
+  'settings.update': { input: SettingsPatch; output: AppSettings };
 
   'categories.list': { input: { from?: string; to?: string } | Void; output: CategoryWithStats[] };
   'categories.create': { input: { name: string; kind: CategoryKind; color: string }; output: Category };
@@ -75,7 +82,7 @@ export interface ApiMap {
   'email.status': { input: Void; output: EmailStatus };
   'email.saveClientConfig': { input: { clientId: string; clientSecret: string }; output: EmailStatus };
   'email.clearClientConfig': { input: Void; output: EmailStatus };
-  'email.connect': { input: Void; output: EmailStatus };
+  'email.connect': { input: { send?: boolean } | Void; output: EmailStatus };
   'email.disconnect': { input: Void; output: EmailStatus };
   'email.scan': { input: { lookbackMonths?: number } | Void; output: ScanResult };
   'email.importSelected': { input: { messageIds: string[] }; output: SyncSummary };
@@ -130,6 +137,12 @@ export interface ApiMap {
   'wealth.earlyRepayment': { input: { assetId: number; date: string; amountCents: number; strategy: 'reduce_term' | 'reduce_payment' }; output: EarlyRepaymentDTO };
   'market.search': { input: { query: string }; output: MarketQuoteDTO[] };
   'market.returns': { input: { symbol: string }; output: MarketReturnsDTO };
+
+  'forecast.overview': { input: Void; output: ForecastOverview };
+  'budgets.setMany': { input: { items: { categoryId: number; amountCents: number }[] }; output: BudgetsOverview };
+  'assistant.ask': { input: { question: string }; output: AssistantAnswer };
+  'notify.testEmail': { input: Void; output: { ok: boolean } };
+  'data.audit': { input: Void; output: AuditReport };
 
   'stocks.overview': { input: Void; output: StocksOverview };
   'stocks.refresh': { input: { force?: boolean } | Void; output: StocksRefreshResult };

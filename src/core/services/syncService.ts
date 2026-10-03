@@ -11,7 +11,9 @@ import type { ImportService } from './importService';
 export interface EmailAuthPort {
   clientConfig(): Promise<{ clientId: string } | null>;
   hasTokens(): Promise<boolean>;
-  authorize(): Promise<void>;
+  authorize(opts?: { send?: boolean }): Promise<void>;
+  /** Optional: the authorization includes permission to send your own alerts. */
+  canSend?(): Promise<boolean>;
   disconnect(): Promise<void>;
   resetClient(): void;
   /** Optional: saved credentials exist but cannot be decrypted. */
@@ -42,6 +44,16 @@ export class SyncService {
 
   private warnedUnreadable = false;
 
+  /** Google expires the authorization after 7 days while the Cloud project is in «Testing» mode. */
+  private weeklyExpiryLikely(state: EmailStatus['state']): boolean {
+    if (state !== 'reauth_required') return false;
+    const at = this.repos.settings.getRaw<string>('gmail.authorizedAt');
+    const failed = this.repos.settings.getRaw<string>('email.authErrorAt');
+    if (!at || !failed) return false;
+    const days = (Date.parse(failed) - Date.parse(at)) / 86400000;
+    return days >= 6 && days <= 9;
+  }
+
   async status(): Promise<EmailStatus> {
     const client = await this.auth.clientConfig();
     const tokens = client ? await this.auth.hasTokens() : false;
@@ -62,15 +74,21 @@ export class SyncService {
       lastSyncAt: last?.finishedAt ?? null,
       lastSync: last,
       lastDocument: this.repos.documents.lastImported(),
-      message: unreadable
+      canSend: tokens ? ((await this.auth.canSend?.()) ?? false) : false,
+      authorizedAt: this.repos.settings.getRaw<string>('gmail.authorizedAt'),
+      weeklyExpiryLikely: this.weeklyExpiryLikely(state),
+      message: unreadable && !client
         ? 'No se ha podido leer la conexión con Gmail guardada en este equipo (Windows no permite descifrarla). Vuelve a configurarla: pega tu ID y secreto de cliente y autoriza de nuevo. Tus datos no se han perdido.'
-        : state === 'reauth_required' ? authError : null,
+        : unreadable
+          ? 'Windows no ha podido descifrar la autorización guardada. Pulsa «Conectar con Google»: tu ID y secreto de cliente se han conservado.'
+          : state === 'reauth_required' ? authError : null,
     };
   }
 
-  async connect(): Promise<EmailStatus> {
-    await this.auth.authorize();
+  async connect(send = false): Promise<EmailStatus> {
+    await this.auth.authorize({ send });
     this.repos.settings.delete('email.authError');
+    this.repos.settings.delete('email.authErrorAt');
     try {
       const provider = await this.providerFactory();
       this.repos.settings.setEmailAccount(await provider.getAccount());
@@ -84,6 +102,7 @@ export class SyncService {
     await this.auth.disconnect();
     this.repos.settings.setEmailAccount(null);
     this.repos.settings.delete('email.authError');
+    this.repos.settings.delete('email.authErrorAt');
     return this.status();
   }
 
@@ -96,6 +115,7 @@ export class SyncService {
   private handleAuthFailure(err: AppError): void {
     if (err.code === 'GMAIL_AUTH_EXPIRED' || err.code === 'GMAIL_PERMISSION') {
       this.repos.settings.setRaw('email.authError', err.message);
+      if (!this.repos.settings.getRaw<string>('email.authErrorAt')) this.repos.settings.setRaw('email.authErrorAt', this.now().toISOString());
       this.auth.resetClient();
     }
   }

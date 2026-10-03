@@ -9,7 +9,8 @@ OAuth 2.0), descarga los PDF, extrae y valida los movimientos, los categoriza co
 base de datos local y calcula estadísticas, ahorro real, capacidad de ahorro, gastos recurrentes y recomendaciones.
 
 **Todo es local.** No se envían movimientos, PDFs, emails ni estadísticas a ningún servicio. La única conexión externa
-es la API de Gmail con permiso `gmail.readonly`. No se usa IA externa. Nunca se piden credenciales de banca online ni se
+es la API de Gmail con permiso `gmail.readonly` (y, solo si lo activas, `gmail.send` para enviarte tus avisos a tu propia
+dirección). No se usa IA externa: el asistente responde en tu equipo. Nunca se piden credenciales de banca online ni se
 accede a la web de BBVA.
 
 > Analizadores BBVA: el PDF de **«Últimos movimientos»** de la cuenta (banca online → Movimientos → descargar PDF)
@@ -26,8 +27,22 @@ accede a la web de BBVA.
 
 ## Funcionalidades
 
-- **Otros bancos**: importa el Excel de movimientos de **CaixaBank, imagin, Sabadell, Santander, Openbank, ING y BBVA**
-  (incluidos los «.xls» que en realidad son tablas HTML), cualquier CSV con fecha/concepto/importe y ficheros
+- **Previsión** (1.0): saldo de la cuenta corriente día a día durante 60 días (cobros por pagador, recibos y cuotas en su
+  fecha, gasto variable y traspasos habituales como mediana de los últimos meses), cierre previsto del mes, meses
+  estacionalmente caros, palancas de ahorro concretas y un plan que se convierte en presupuestos. Ver
+  [docs/forecast.md](docs/forecast.md).
+- **Ingresos previsibles**: nómina, pagas extra y transferencias de la propia empresa (horas extra, incentivos)
+  agrupadas por pagador.
+- **Pregunta a Hormiga**: asistente local y determinista (sin IA externa) que responde con tus datos y con la ayuda
+  integrada; **Ctrl+K** abre la paleta de comandos.
+- **Perfiles**: varias personas en el mismo equipo, cada una con foto y una carpeta de datos independiente.
+- **Avisos**: notificaciones de Windows, email opcional a tu propia dirección y resumen semanal; bandeja del sistema,
+  inicio con Windows y punto rojo en la barra de tareas.
+- **Comprobar mis números**: auditoría de consistencia (identidad de ahorro, suma de categorías, signos, saldos frente a
+  extractos, cuadros de amortización, presupuestos, duplicados, reglas demasiado generales).
+- **Otros bancos**: importa el Excel de movimientos de **CaixaBank, imagin, Sabadell, Santander, Openbank, ING,
+  Bankinter y BBVA** (incluidos los «.xls» que en realidad son tablas HTML), los CSV de **N26** y **Revolut**, cualquier
+  CSV con fecha/concepto/importe y ficheros
   **Norma 43** (AEB). Detecta el banco y verifica los saldos fila a fila cuando el fichero los trae.
 - **Metas de ahorro** con fecha y aportaciones, **fondo de emergencia** (meses de gasto esencial cubiertos),
   **patrimonio** (activos, inversiones y deudas con valoraciones periódicas, rentabilidad sobre lo aportado) y
@@ -165,8 +180,11 @@ Genera en `release/`:
 
 ### Compartir con otras personas
 
+**Para tus amigos y familia** hay una página de descarga sin código: <https://github.com/davidescobar98/hormiga-app>
+(botón «Descargar Hormiga para Windows»). Una vez instalada, la app se actualiza sola.
+
 El ejecutable no contiene ningún dato: ni movimientos, ni documentos, ni credenciales. Cada persona que lo abre empieza
-con una base de datos vacía en su propio `%APPDATA%\Hormiga` y carga sus propios extractos (o usa los datos de
+con una base de datos vacía en su propio `%APPDATA%\Hormiga` (o en la carpeta de su perfil) y carga sus propios extractos (o usa los datos de
 demostración). Para Gmail, cada persona configura su propio cliente OAuth (o el tuyo si la añades como usuario de
 prueba en tu proyecto de Google Cloud); la importación manual de PDF funciona sin configurar nada. El paquete solo contiene `out/`
 (código compilado, sin source maps) y las dependencias de producción (`google-auth-library`, `pdfjs-dist`, `zod`);
@@ -220,6 +238,7 @@ Más detalle en [docs/security.md](docs/security.md).
 
 ## Documentación técnica
 
+- [docs/forecast.md](docs/forecast.md) — previsión de saldo, ingresos por pagador, meses completos y plan de ahorro.
 - [docs/stocks.md](docs/stocks.md) — Bolsa: indicadores, señales, FIFO, impuestos y avisos.
 - [docs/mobile.md](docs/mobile.md) — plan para iOS y Android.
 - [docs/budgets-alerts-lock.md](docs/budgets-alerts-lock.md) — presupuestos, avisos, sincronización periódica, bloqueo y operaciones patrimoniales.

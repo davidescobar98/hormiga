@@ -178,7 +178,7 @@ export interface KeywordRule {
 /** Keyword/pattern rules (source RULE). Matched on the normalized description as whole words. */
 export const KEYWORD_RULES: KeywordRule[] = [
   { keywords: ['FARMACIA', 'PARAFARMACIA', 'CLINICA', 'DENTAL', 'HOSPITAL', 'OPTICA', 'FISIOTERAPIA', 'MEDICO'], category: 'health', label: 'salud' },
-  { keywords: ['GASOLINERA', 'ESTACION DE SERVICIO', 'E.S.', 'CARBURANTES', 'GASOLEO'], category: 'fuel', label: 'combustible' },
+  { keywords: ['GASOLINERA', 'GASOLINERAS', 'BENZINERA', 'BENZINERES', 'ESTACION DE SERVICIO', 'ESTACIO DE SERVEI', 'E.S.', 'CARBURANTES', 'CARBURANTS', 'GASOLEO'], category: 'fuel', label: 'combustible' },
   { keywords: ['RESTAURANTE', 'REST.', 'BAR', 'CAFETERIA', 'CAFE', 'RAMEN', 'COCTEL', 'COCKTEL', 'IRISH', 'CREPERIA', 'HELADERIA', 'FRANKFURT', 'TABERNA', 'PIZZERIA', 'BURGER', 'SUSHI', 'TAPAS', 'CERVECERIA', 'KEBAB', 'ASADOR', 'BRASERIA', 'MARISQUERIA'], category: 'restaurants', label: 'restauración' },
   { keywords: ['SUPERMERCADO', 'SUPERMERCAT', 'HIPERMERCADO', 'FRUTERIA', 'CARNICERIA', 'PANADERIA', 'PESCADERIA', 'ALIMENTACION', 'MERCADO'], category: 'groceries', label: 'alimentación' },
   { keywords: ['PARKING', 'APARCAMIENTO', 'ESTACIONAMENT', 'APARCAMENT', 'TAXI', 'METRO', 'AUTOBUS', 'BUS', 'TRANSPORTE', 'PEAJE', 'ITV'], category: 'transport', label: 'transporte' },

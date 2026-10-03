@@ -20,8 +20,9 @@ export interface Paths {
   logFile: string;
 }
 
-export function resolvePaths(): Paths {
-  const root = join(app.getPath('userData'), 'data');
+/** Paths of one profile's data (the first profile uses the original "data" folder). */
+export function resolvePaths(dataDir?: string): Paths {
+  const root = dataDir ?? join(app.getPath('userData'), 'data');
   const logs = join(app.getPath('userData'), 'logs');
   return {
     root,
@@ -113,7 +114,16 @@ export class Runtime {
     if (!settings.onboardingCompleted && settings.lastSeenVersion !== app.getVersion()) this.core.repos.settings.updateSettings({ lastSeenVersion: app.getVersion() });
   }
 
+  private closed = false;
+
+  /** Idempotent: before-quit can fire more than once (tray "Salir", updates). */
   close(): void {
-    this.db?.close();
+    if (this.closed) return;
+    this.closed = true;
+    try {
+      this.db?.close();
+    } catch {
+      // Already closed.
+    }
   }
 }

@@ -1,6 +1,6 @@
 import type { Category, CreateRuleInput, CreateRuleResult, RuleSuggestion, TransactionType, UpdateTransactionInput, UpdateTransactionResult } from '../../shared/types';
 import { categorize, sortUserRules, type CategorizationResult, type UserRule } from '../domain/categorizer';
-import { findKnownMerchant, normalizeMerchant, normalizeText, type MerchantResult } from '../domain/merchant';
+import { findKnownMerchant, normalizeMerchant, normalizeText, type MerchantResult, isGenericMerchant } from '../domain/merchant';
 import { AppError, invalid } from '../errors';
 import type { Repos } from './context';
 
@@ -95,7 +95,7 @@ export class CategorizationService {
           if (aligned !== before.type) this.repos.transactions.setFields(input.id, { type: aligned });
         }
         const after = this.repos.transactions.get(input.id);
-        if (after.merchantId) {
+        if (after.merchantId && !isGenericMerchant(this.repos.merchants.get(after.merchantId).key)) {
           const merchant = this.repos.merchants.get(after.merchantId);
           const existing = this.rules().find((r) => r.matchType === 'merchant' && r.pattern === merchant.key);
           if (!existing || existing.categoryId !== cat.id) {
@@ -121,6 +121,7 @@ export class CategorizationService {
       const id = Number(input.pattern);
       if (!Number.isInteger(id)) throw invalid('Comercio no válido.');
       pattern = this.repos.merchants.get(id).key;
+      if (isGenericMerchant(pattern)) throw invalid('«' + this.repos.merchants.get(id).displayName + '» agrupa operaciones muy distintas (por ejemplo todos tus Bizum): cambia la categoría de cada movimiento o crea una regla por una palabra del concepto.');
     } else {
       pattern = normalizeText(input.pattern);
       if (pattern.length < 3) throw invalid('El texto de la regla debe tener al menos 3 caracteres alfanuméricos.');

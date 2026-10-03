@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, toApiError, useInvalidate, useQuery } from '../api';
-import type { AppSettings, LockConfigInput } from '../../../shared/types';
+import type { AppSettings, LockConfigInput, SettingsPatch } from '../../../shared/types';
 import { Callout, Card, Dialog, Field, Loading, useToast } from './ui';
 
 const AUTO_LOCK = [
@@ -111,7 +111,7 @@ function PinDialog({ mode, helloAvailable, onClose, onSave }: { mode: 'enable' |
 export function AlertsSettingsCard({ settings }: { settings: AppSettings }) {
   const invalidate = useInvalidate();
   const toast = useToast();
-  const update = async (patch: Partial<AppSettings>) => {
+  const update = async (patch: SettingsPatch) => {
     try {
       await api('settings.update', patch);
       toast({ tone: 'info', message: 'Guardado.' });
@@ -125,7 +125,23 @@ export function AlertsSettingsCard({ settings }: { settings: AppSettings }) {
       <div className="stack">
         <label className="check">
           <input type="checkbox" checked={settings.notifications.enabled} onChange={(e) => void update({ notifications: { enabled: e.target.checked } })} />
-          Mostrar notificaciones de Windows: presupuestos al 80 % o superados, cargos inusuales o duplicados, subidas de precio, pagos anuales próximos y transferencias grandes por revisar
+          Mostrar notificaciones de Windows: saldo bajo previsto, presupuestos al 80 % o superados, cargos inusuales o duplicados, subidas de precio, pagos anuales próximos, meses caros y transferencias por revisar
+        </label>
+        <EmailAlertsSettings settings={settings} update={update} />
+        <label className="check">
+          <input type="checkbox" checked={settings.notifications.weeklySummary} onChange={(e) => void update({ notifications: { weeklySummary: e.target.checked } })} />
+          Resumen de mi semana los lunes (gasto de la semana, próximos pagos y previsión del mes)
+        </label>
+        <Field label="Avisarme si mi cuenta corriente va a bajar de (€)" htmlFor="low-balance" help="Hormiga prevé tu saldo con tus recibos, tu nómina y tu gasto habitual.">
+          <input id="low-balance" className="input" type="number" min={0} step={50} style={{ width: 140 }} defaultValue={Math.round(settings.notifications.lowBalanceCents / 100)} onBlur={(e) => void update({ notifications: { lowBalanceCents: Math.max(0, Math.round(Number(e.target.value || 0) * 100)) } })} />
+        </Field>
+        <label className="check">
+          <input type="checkbox" checked={settings.desktop.trayOnClose} onChange={(e) => void update({ desktop: { trayOnClose: e.target.checked } })} />
+          Al cerrar la ventana, seguir en segundo plano (icono junto al reloj) para sincronizar y avisarme
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.desktop.openAtLogin} onChange={(e) => void update({ desktop: { openAtLogin: e.target.checked } })} />
+          Abrir Hormiga en segundo plano al iniciar Windows
         </label>
         <Field label="Buscar extractos nuevos en Gmail mientras Hormiga está abierta" htmlFor="sync-every">
           <select id="sync-every" className="select" value={settings.syncIntervalHours} onChange={(e) => void update({ syncIntervalHours: Number(e.target.value) })}>
@@ -139,5 +155,37 @@ export function AlertsSettingsCard({ settings }: { settings: AppSettings }) {
         <p className="muted small">Con Hormiga bloqueada, las notificaciones no muestran importes ni comercios.</p>
       </div>
     </Card>
+  );
+}
+
+function EmailAlertsSettings({ settings, update }: { settings: AppSettings; update: (p: SettingsPatch) => Promise<void> }) {
+  const email = useQuery(() => api('email.status'), []);
+  const toast = useToast();
+  const canSend = email.data?.state === 'connected' && email.data.canSend;
+  const test = async () => {
+    try {
+      await api('notify.testEmail');
+      toast({ tone: 'info', message: `Correo de prueba enviado a ${email.data?.account ?? 'tu dirección'}.` });
+    } catch (err) {
+      toast({ tone: 'error', message: toApiError(err).message });
+    }
+  };
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <label className="check">
+        <input type="checkbox" checked={settings.notifications.email} disabled={!canSend} onChange={(e) => void update({ notifications: { email: e.target.checked } })} />
+        Enviarme por correo los avisos importantes y el resumen semanal (de mi Gmail a mi Gmail)
+      </label>
+      {!canSend && <p className="muted small" style={{ marginLeft: 26 }}>Necesita permiso para enviar: en «Cuenta de correo» pulsa «Permitir enviarme avisos por correo».</p>}
+      {canSend && settings.notifications.email && (
+        <div className="row" style={{ marginLeft: 26, gap: 12, flexWrap: 'wrap' }}>
+          <label className="check">
+            <input type="checkbox" checked={settings.notifications.emailAmounts} onChange={(e) => void update({ notifications: { emailAmounts: e.target.checked } })} />
+            Incluir importes en los correos
+          </label>
+          <button className="btn sm" onClick={() => void test()}>Enviarme un correo de prueba</button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -6,7 +6,14 @@ Revisión realizada al cerrar el MVP. Estado: ✅ aplicado · ⚠️ limitación
 
 - ✅ OAuth 2.0 para apps instaladas: navegador del sistema, loopback `127.0.0.1` en puerto aleatorio, PKCE S256,
   `state` de 192 bits verificado, timeout de 5 min, servidor cerrado tras la respuesta (tests en `tests/unit/oauth.test.ts`).
-- ✅ Ámbito mínimo `gmail.readonly`: la app no puede enviar, modificar ni borrar correos.
+- ✅ Ámbito mínimo `gmail.readonly`: la app no puede modificar ni borrar correos.
+- ✅ `gmail.send` solo si la persona marca «Enviarme los avisos por email» al conectar (opt-in). El destinatario es
+  siempre la propia cuenta conectada (dirección devuelta por la API `users/me/profile`), nunca una dirección escrita a
+  mano; los importes solo se incluyen si se activa expresamente.
+- ✅ El ID y el secreto del cliente OAuth se conservan entre versiones (cifrados con `safeStorage` y, como respaldo, en
+  la base de datos local de cada perfil) hasta que la persona los borra: no hay que volver a crear credenciales.
+- ⚠️ En proyectos de Google Cloud en modo *Prueba*, Google caduca la autorización a los 7 días. Hormiga lo detecta y
+  explica cómo publicar la app (Audiencia → Publicar) para que no vuelva a pasar.
 - ✅ El proceso principal solo abre `https://accounts.google.com` desde el flujo OAuth; las ayudas usan URLs fijas.
 - ✅ Desconectar revoca el token en Google (si hay conexión) y borra los tokens locales siempre.
 - ⚠️ El «secreto» de un cliente OAuth de escritorio no es confidencial por diseño de Google; se guarda cifrado igualmente.
@@ -34,6 +41,21 @@ Revisión realizada al cerrar el MVP. Estado: ✅ aplicado · ⚠️ limitación
 - ✅ Fuses: sin `RunAsNode`, sin `NODE_OPTIONS`, sin `--inspect`, validación de integridad del ASAR, carga solo desde ASAR,
   sin privilegios extra para `file://`.
 - ✅ Instancia única.
+- ✅ Errores no capturados del proceso principal se registran en el log (sin datos) en lugar de mostrar diálogos; las
+  tareas periódicas se detienen al cerrar antes de cerrar la base de datos.
+
+## Perfiles
+
+- ✅ Cada perfil tiene su propia carpeta (base de datos, documentos, secretos, copias). Cambiar de perfil reinicia la app
+  para que nunca haya dos perfiles abiertos en el mismo proceso.
+- ✅ `profiles.json` solo guarda nombre, color, foto (JPEG reducido a 160 px, validado como `data:image`) y carpeta.
+- ⚠️ Los perfiles separan los datos pero no los protegen entre sí: quien quiera privacidad frente a otras personas del
+  mismo usuario de Windows debe activar el PIN de su perfil.
+
+## Asistente
+
+- ✅ «Pregunta a Hormiga» es determinista y local: detecta la intención y el periodo con reglas y consulta la base de
+  datos local. No hay modelo de IA ni llamadas de red.
 - ⚠️ El instalador no está firmado con certificado de código.
 
 ## Sistema de archivos
@@ -78,7 +100,7 @@ Revisión realizada al cerrar el MVP. Estado: ✅ aplicado · ⚠️ limitación
 | Destino | Cuándo | Qué se envía |
 |---|---|---|
 | Google (OAuth + Gmail API, solo lectura) | Si conectas Gmail | Token OAuth; se leen solo los emails candidatos a extracto |
-| GitHub Releases (`github.com/davidescobar98/hormiga`) | Al abrir la app instalada y cada 6 h (desactivable en Ajustes → Actualizaciones) | Nada tuyo: solo la petición de la última versión (IP y versión de la app, como cualquier descarga) |
+| GitHub Releases (`github.com/davidescobar98/hormiga-app`, solo descargas) | Al abrir la app instalada y cada 6 h (desactivable en Ajustes → Actualizaciones) | Nada tuyo: solo la petición de la última versión (IP y versión de la app, como cualquier descarga) |
 | Yahoo Finance (datos públicos) | Solo si activas los datos de mercado: al buscar, y cada 2 horas con la app abierta si sigues valores o tienes cartera en «Bolsa» | El texto buscado (nombre, ticker o ISIN), los símbolos que sigues o tienes y los pares de divisa `EURxxx=X`; nunca importes, cantidades ni operaciones |
 
 Actualizaciones: electron-updater descarga el instalador de la release y comprueba su SHA-512 (publicado en

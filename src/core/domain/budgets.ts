@@ -4,12 +4,23 @@ import type { BudgetLine, BudgetStatus } from '../../shared/types';
 
 export const BUDGET_WARNING_BP = 8000;
 
-/** Suggested monthly budget: average of the last complete months, rounded up to 10 €. Null without history. */
+/**
+ * What you usually spend in a month: the median of the last complete months. More robust than the mean to calendar
+ * shifts (a monthly bill charged on the 1st instead of the 31st lands twice in one month and zero in the next) and
+ * to one-off purchases. Null without history.
+ */
+export function typicalMonthly(monthly: Cents[]): Cents | null {
+  if (!monthly.some((v) => v > 0)) return null;
+  const s = [...monthly].sort((a, b) => a - b);
+  const n = s.length;
+  return n % 2 ? s[(n - 1) / 2]! : Math.round((s[n / 2 - 1]! + s[n / 2]!) / 2);
+}
+
+/** Suggested monthly budget: your usual month (median of the last complete months), rounded up to 10 €. */
 export function suggestBudget(monthly: Cents[]): Cents | null {
-  const withData = monthly.filter((v) => v > 0);
-  if (!withData.length) return null;
-  const avg = withData.reduce((t, v) => t + v, 0) / monthly.length;
-  return Math.max(1000, Math.ceil(avg / 1000) * 1000);
+  const typical = typicalMonthly(monthly);
+  if (!typical) return null;
+  return Math.max(1000, Math.ceil(typical / 1000) * 1000);
 }
 
 /**

@@ -15,22 +15,31 @@ import type { Cell, ExtractedDocument, ParsedStatement, RawTransaction, Statemen
  *  - Santander / Openbank: .xls (often HTML) with ~7 preamble rows: Fecha Operación · Fecha Valor · Concepto · Importe · Saldo
  *  - ING: F. Valor · Categoría · Subcategoría · Descripción · Comentario · Importe (€) · Saldo (€)
  *  - BBVA (Excel): F.Valor · Fecha · Concepto · Movimiento · Importe · Divisa · Disponible · Observaciones
+ *  - N26 (CSV): Fecha · Beneficiario · Número de cuenta · Tipo de transacción · Referencia de pago · Categoría ·
+ *    Cantidad (EUR) · … (ISO dates, dot decimals)
+ *  - Revolut (CSV): Type · Product · Started Date · Completed Date · Description · Amount · Fee · Currency · State ·
+ *    Balance (dot decimals; reverted, declined and pending rows are not movements; the fee is charged on top)
  */
 
-type Column = 'date' | 'valueDate' | 'description' | 'secondary' | 'detail' | 'amount' | 'debit' | 'credit' | 'balance';
+type Column = 'date' | 'valueDate' | 'description' | 'secondary' | 'detail' | 'amount' | 'debit' | 'credit' | 'balance' | 'fee' | 'state';
 
 const ALIASES: Record<Column, string[]> = {
-  date: ['FECHA', 'F OPERACION', 'FECHA OPERACION', 'FECHA DE OPERACION', 'F OPERATIVA', 'FECHA OPERATIVA', 'FECHA CONTABLE', 'FECHA OPER', 'DATE', 'BOOKING DATE', 'FECHA MOVIMIENTO'],
-  valueDate: ['FECHA VALOR', 'F VALOR', 'FVALOR', 'VALUE DATE'],
-  description: ['CONCEPTO', 'DESCRIPCION', 'DESCRIPTION', 'DETALLE', 'CONCEPTO MOVIMIENTO', 'MOVIMIENTO'],
+  date: ['COMPLETED DATE', 'FECHA DE FINALIZACION', 'FECHA COMPLETADA', 'FECHA', 'F OPERACION', 'FECHA OPERACION', 'FECHA DE OPERACION', 'F OPERATIVA', 'FECHA OPERATIVA', 'FECHA CONTABLE', 'FECHA OPER', 'DATE', 'BOOKING DATE', 'FECHA MOVIMIENTO'],
+  valueDate: ['FECHA VALOR', 'F VALOR', 'FVALOR', 'VALUE DATE', 'STARTED DATE', 'FECHA DE INICIO'],
+  description: ['CONCEPTO', 'DESCRIPCION', 'DESCRIPTION', 'DETALLE', 'CONCEPTO MOVIMIENTO', 'MOVIMIENTO', 'BENEFICIARIO', 'PAYEE'],
   // "Movimiento" is secondary when a "Concepto" column also exists (BBVA Excel: Concepto = merchant, Movimiento = kind).
   secondary: ['MOVIMIENTO'],
-  detail: ['MAS DATOS', 'OBSERVACIONES', 'COMENTARIO', 'BENEFICIARIO ORDENANTE', 'INFORMACION ADICIONAL', 'CONCEPTO AMPLIADO'],
-  amount: ['IMPORTE', 'IMPORTE EUR', 'IMPORTE EUROS', 'CANTIDAD', 'AMOUNT', 'AMOUNT EUR'],
+  detail: ['MAS DATOS', 'OBSERVACIONES', 'COMENTARIO', 'BENEFICIARIO ORDENANTE', 'INFORMACION ADICIONAL', 'CONCEPTO AMPLIADO', 'REFERENCIA DE PAGO', 'PAYMENT REFERENCE'],
+  amount: ['IMPORTE', 'IMPORTE EUR', 'IMPORTE EUROS', 'CANTIDAD', 'CANTIDAD EUR', 'AMOUNT', 'AMOUNT EUR'],
   debit: ['CARGO', 'CARGOS', 'DEBE', 'GASTO', 'GASTOS'],
   credit: ['ABONO', 'ABONOS', 'HABER', 'INGRESO', 'INGRESOS'],
   balance: ['SALDO', 'SALDO EUR', 'SALDO DISPONIBLE', 'DISPONIBLE', 'BALANCE'],
+  fee: ['FEE', 'COMISION'],
+  state: ['STATE', 'ESTADO'],
 };
+
+/** Rows that are not (yet) movements: reverted, declined or pending operations (Revolut, N26…). */
+const NOT_BOOKED = new Set(['REVERTED', 'DECLINED', 'FAILED', 'PENDING', 'CANCELLED', 'REVERTIDA', 'REVERTIDO', 'RECHAZADA', 'RECHAZADO', 'PENDIENTE', 'CANCELADA', 'CANCELADO', 'FALLIDA']);
 
 type Mapping = Partial<Record<Column, number>>;
 
@@ -84,6 +93,8 @@ const PROFILES: BankProfile[] = [
   { bank: 'Openbank', headers: ['FECHA OPERACION', 'CONCEPTO', 'IMPORTE'], markers: /open ?bank/i },
   { bank: 'Santander', headers: ['FECHA OPERACION', 'CONCEPTO', 'IMPORTE'], markers: /santander/i },
   { bank: 'Bankinter', headers: ['FECHA CONTABLE', 'FECHA VALOR', 'DESCRIPCION', 'IMPORTE'], markers: /bankinter/i },
+  { bank: 'Revolut', headers: ['COMPLETED DATE', 'DESCRIPTION', 'AMOUNT', 'STATE'], markers: /revolut/i },
+  { bank: 'N26', headers: ['BENEFICIARIO', 'CANTIDAD EUR'], markers: /\bN26\b/ },
 ];
 
 const TEXT_ONLY_MARKERS: [string, RegExp][] = [
@@ -193,7 +204,10 @@ export class BankTableParser implements StatementParser {
       const get = (c: Column): Cell => (cols[c] !== undefined ? (r[cols[c]!] ?? null) : null);
       const dateCell = get('date');
       const description = cellText(get('description'));
+      if (cols.state !== undefined && NOT_BOOKED.has(normalizeText(cellText(get('state'))))) continue;
       let amountCents = cellToCents(get('amount'));
+      const fee = cols.fee !== undefined ? cellToCents(get('fee')) : null;
+      if (amountCents !== null && fee) amountCents -= Math.abs(fee);
       if (amountCents === null && cols.debit !== undefined && cols.credit !== undefined) {
         const debit = cellToCents(get('debit')) ?? 0;
         const credit = cellToCents(get('credit')) ?? 0;

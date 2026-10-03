@@ -6,8 +6,21 @@ import { AppError } from '../errors';
 import type { Logger } from '../services/context';
 import type { SecretVault } from './types';
 
-/** Read-only access: list/read messages and download attachments. No send, modify, delete or settings. */
+/** Read-only access: list/read messages and download attachments. No modify, delete or settings. */
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+/** Optional: send messages (Hormiga only ever sends your own alerts to your own address). */
+export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+
+/**
+ * Copy of the OAuth client (ID and secret) outside the encrypted vault, in your local database. For desktop apps
+ * Google does not treat the client secret as confidential; keeping it means you never have to create or paste it
+ * again if Windows can no longer decrypt the vault. Tokens (the real access) stay only in the vault.
+ */
+export interface ClientConfigStore {
+  get(): OAuthClientConfig | null;
+  set(config: OAuthClientConfig | null): void;
+  authorizedAt(at?: string | null): string | null;
+}
 
 const SECRET_TOKENS = 'gmail.tokens';
 const SECRET_CLIENT = 'gmail.client';
@@ -31,6 +44,7 @@ export class GmailAuth {
     private readonly openExternal: (url: string) => Promise<void>,
     private readonly log: Logger,
     private readonly envClient: OAuthClientConfig | null = null,
+    private readonly store: ClientConfigStore | null = null,
   ) {}
 
   async clientConfig(): Promise<OAuthClientConfig | null> {
@@ -43,17 +57,25 @@ export class GmailAuth {
         /* fall through */
       }
     }
+    const kept = this.store?.get();
+    if (kept?.clientId) {
+      // Heal the vault copy (best effort) so both stay in sync.
+      if (this.vault.isAvailable()) await this.vault.set(SECRET_CLIENT, JSON.stringify(kept)).catch(() => undefined);
+      return kept;
+    }
     return this.envClient?.clientId ? this.envClient : null;
   }
 
   async saveClientConfig(config: OAuthClientConfig): Promise<void> {
     this.requireVault();
     await this.vault.set(SECRET_CLIENT, JSON.stringify(config));
+    this.store?.set(config);
     this.client = null;
   }
 
   async clearClientConfig(): Promise<void> {
     await this.vault.delete(SECRET_CLIENT);
+    this.store?.set(null);
     this.client = null;
   }
 
@@ -73,15 +95,26 @@ export class GmailAuth {
     }
   }
 
+  /** Whether the saved authorization includes permission to send (your own alerts to yourself). */
+  async canSend(): Promise<boolean> {
+    const raw = await this.vault.get(SECRET_TOKENS);
+    if (!raw) return false;
+    try {
+      return String((JSON.parse(raw) as Credentials).scope ?? '').split(' ').includes(GMAIL_SEND_SCOPE);
+    } catch {
+      return false;
+    }
+  }
+
   /** Runs the interactive authorization in the system browser. */
-  async authorize(): Promise<void> {
-    this.authInProgress ??= this.runAuthorization().finally(() => {
+  async authorize(opts: { send?: boolean } = {}): Promise<void> {
+    this.authInProgress ??= this.runAuthorization(!!opts.send).finally(() => {
       this.authInProgress = null;
     });
     return this.authInProgress;
   }
 
-  private async runAuthorization(): Promise<void> {
+  private async runAuthorization(send: boolean): Promise<void> {
     this.requireVault();
     const cfg = await this.clientConfig();
     if (!cfg) throw new AppError('GMAIL_NOT_CONFIGURED', 'Falta configurar el cliente OAuth de Google (ID y secreto de cliente de escritorio).');
@@ -99,7 +132,7 @@ export class GmailAuth {
     const url = client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: [GMAIL_SCOPE],
+      scope: send ? [GMAIL_SCOPE, GMAIL_SEND_SCOPE] : [GMAIL_SCOPE],
       state,
       code_challenge_method: CodeChallengeMethod.S256,
       code_challenge: codeChallenge,
@@ -119,8 +152,9 @@ export class GmailAuth {
         throw new AppError('GMAIL_PERMISSION', 'No se concedió el permiso de lectura de Gmail. Vuelve a conectar y marca la casilla de acceso.');
       }
       await this.vault.set(SECRET_TOKENS, JSON.stringify(tokens));
+      this.store?.authorizedAt(new Date().toISOString());
       this.client = null;
-      this.log.info('gmail.authorized');
+      this.log.info('gmail.authorized', { send: String(tokens.scope ?? '').includes(GMAIL_SEND_SCOPE) });
     } finally {
       server.close();
     }
@@ -157,7 +191,7 @@ export class GmailAuth {
           reject(new AppError('GMAIL_ERROR', 'Google no devolvió un código de autorización.'));
           return;
         }
-        finish(true, 'Hormiga solo tiene permiso de lectura sobre tu correo.');
+        finish(true, 'Hormiga puede leer tu correo para buscar extractos y, si lo has permitido, enviarte tus avisos a ti mismo. Nunca borra ni modifica nada.');
         resolve(code);
       });
     });
@@ -197,6 +231,28 @@ export class GmailAuth {
     this.client = null;
   }
 
+  /**
+   * Sends an email from your account to your own address. Only used for your own alerts and summaries; needs the
+   * optional send permission.
+   */
+  async sendToSelf(to: string, subject: string, text: string): Promise<void> {
+    if (!(await this.canSend())) throw new AppError('GMAIL_PERMISSION', 'Falta el permiso para enviar correos: vuelve a conectar Gmail marcando «Enviarme mis avisos por correo».');
+    const client = await this.getClient();
+    const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+    const body = Buffer.from(text, 'utf8').toString('base64').replace(/.{76}/g, (line) => `${line}\r\n`);
+    const mime = [`To: ${to}`, `From: ${to}`, `Subject: ${encodedSubject}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', body].join('\r\n');
+    try {
+      await client.request({
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+        method: 'POST',
+        data: { raw: Buffer.from(mime, 'utf8').toString('base64url') },
+        timeout: 30000,
+      });
+    } catch (err) {
+      throw mapGoogleError(err);
+    }
+  }
+
   /** Called when Google reports the grant is no longer valid. */
   resetClient(): void {
     this.client = null;
@@ -215,7 +271,7 @@ export function mapGoogleError(err: unknown): AppError {
     return new AppError('GMAIL_OFFLINE', 'No hay conexión con Gmail. Comprueba tu conexión a internet; lo ya importado sigue disponible.', err);
   }
   if (/invalid_grant/i.test(data) || /invalid_grant/i.test(message)) {
-    return new AppError('GMAIL_AUTH_EXPIRED', 'La autorización de Gmail ha caducado o se ha revocado. Vuelve a conectar la cuenta.', err);
+    return new AppError('GMAIL_AUTH_EXPIRED', 'Google ha retirado la autorización de Gmail. Pulsa «Volver a conectar»: no hace falta crear ni pegar nada nuevo.', err);
   }
   if (status === 401) return new AppError('GMAIL_AUTH_EXPIRED', 'La sesión de Gmail ha caducado. Vuelve a conectar la cuenta.', err);
   if (status === 429 || /rateLimitExceeded|userRateLimitExceeded/i.test(data)) {

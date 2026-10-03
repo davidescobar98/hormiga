@@ -15,6 +15,10 @@ import { AccountsService } from './services/accountsService';
 import { BudgetsService } from './services/budgetsService';
 import { YahooMarketProvider, type MarketProvider } from './market/yahoo';
 import { StocksService } from './services/stocksService';
+import { ForecastService } from './services/forecastService';
+import { NotifyService } from './services/notifyService';
+import { AssistantService } from './services/assistantService';
+import { AuditService } from './services/auditService';
 
 export interface CoreDeps {
   db: Database;
@@ -45,6 +49,10 @@ export interface Core {
   accounts: AccountsService;
   budgets: BudgetsService;
   stocks: StocksService;
+  forecast: ForecastService;
+  notify: NotifyService;
+  assistant: AssistantService;
+  audit: AuditService;
 }
 
 /** Composition root of the application layer (no Electron dependencies: fully testable in Node). */
@@ -62,7 +70,14 @@ export function createCore(deps: CoreDeps): Core {
   const accounts = new AccountsService(repos, categorization, deps.now);
   importer.accounts = accounts;
   const analytics = new AnalyticsService(repos, deps.now);
-  const gmailAuth = new GmailAuth(deps.vault, deps.openExternal, deps.log, deps.envOAuthClient);
+  const gmailAuth = new GmailAuth(deps.vault, deps.openExternal, deps.log, deps.envOAuthClient, {
+    get: () => repos.settings.getRaw<OAuthClientConfig>('gmail.clientConfig'),
+    set: (c) => (c ? repos.settings.setRaw('gmail.clientConfig', c) : repos.settings.delete('gmail.clientConfig')),
+    authorizedAt: (at) => {
+      if (at) repos.settings.setRaw('gmail.authorizedAt', at);
+      return repos.settings.getRaw<string>('gmail.authorizedAt');
+    },
+  });
   const providerFactory =
     deps.providerFactory ??
     (async () => {
@@ -120,5 +135,17 @@ export function createCore(deps: CoreDeps): Core {
       return [];
     }
   };
-  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts, budgets, stocks };
+  const forecast = new ForecastService(repos, analytics, accounts, wealth);
+  budgets.forecastAlerts = () => {
+    try {
+      return forecast.alerts();
+    } catch (err) {
+      deps.log.warn('forecast.alerts_failed', { err });
+      return [];
+    }
+  };
+  const notify = new NotifyService(repos, gmailAuth, analytics, forecast, deps.log, deps.now);
+  const assistant = new AssistantService(repos, analytics, accounts, forecast, budgets, wealth, deps.now);
+  const audit = new AuditService(repos, analytics, accounts, budgets, forecast, deps.now);
+  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts, budgets, stocks, forecast, notify, assistant, audit };
 }

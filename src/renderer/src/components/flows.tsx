@@ -282,6 +282,7 @@ export function EmailConnectPanel({ status, onChanged }: { status: EmailStatus |
   const [clientSecret, setClientSecret] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [send, setSend] = useState(true);
   const toast = useToast();
 
   const run = async (label: string, fn: () => Promise<unknown>, success?: string) => {
@@ -306,9 +307,15 @@ export function EmailConnectPanel({ status, onChanged }: { status: EmailStatus |
           <Icon name={status.state === 'connected' ? 'check' : 'mail'} size={13} />
           {status.state === 'connected' ? `Conectado${status.account ? ` · ${status.account}` : ''}` : status.state === 'reauth_required' ? 'Requiere volver a conectar' : status.state === 'disconnected' ? 'No conectado' : 'Sin configurar'}
         </Badge>
-        <span className="muted small">Permiso solicitado: solo lectura (gmail.readonly).</span>
+        <span className="muted small">{status.canSend ? 'Permisos: leer extractos y enviarte tus avisos a ti mismo.' : 'Permiso: solo lectura (gmail.readonly).'}</span>
       </div>
       {status.message && <Callout tone="warning">{status.message}</Callout>}
+      {status.weeklyExpiryLikely && (
+        <Callout tone="info">
+          Google ha cortado la conexión justo una semana después de autorizarla: tu proyecto de Google Cloud está en modo «Prueba» y en ese modo la autorización caduca a los 7 días. Para que no vuelva a pasar: Google Cloud Console → Google Auth Platform → Audiencia → «Publicar app» (es una app personal: al conectar verás el aviso de «app no verificada», es normal). Después pulsa «Volver a conectar».{' '}
+          <button className="btn link" onClick={() => api('shell.openHelp', { topic: 'oauth-consent' })}>Abrir la pantalla de Audiencia</button>
+        </Callout>
+      )}
 
       {status.state === 'not_configured' && (
         <div className="stack">
@@ -333,18 +340,27 @@ export function EmailConnectPanel({ status, onChanged }: { status: EmailStatus |
       )}
 
       {(status.state === 'disconnected' || status.state === 'reauth_required') && (
-        <div className="row">
-          <button className="btn primary" disabled={!!busy} onClick={() => run('connect', () => api('email.connect'), 'Cuenta de Gmail conectada.')}>
-            {busy === 'connect' ? <span className="spinner" aria-hidden /> : <Icon name="mail" />} {busy === 'connect' ? 'Esperando autorización en el navegador…' : 'Conectar con Google'}
-          </button>
-          <button className="btn ghost" disabled={!!busy} onClick={() => run('clear', () => api('email.clearClientConfig'))}>Cambiar cliente OAuth</button>
+        <div className="stack">
+          <label className="check">
+            <input type="checkbox" checked={send} onChange={(e) => setSend(e.target.checked)} />
+            Enviarme también mis avisos importantes por correo (a mi propia dirección)
+          </label>
+          <div className="row">
+            <button className="btn primary" disabled={!!busy} onClick={() => run('connect', () => api('email.connect', { send }), 'Cuenta de Gmail conectada.')}>
+              {busy === 'connect' ? <span className="spinner" aria-hidden /> : <Icon name="mail" />} {busy === 'connect' ? 'Esperando autorización en el navegador…' : status.state === 'reauth_required' ? 'Volver a conectar' : 'Conectar con Google'}
+            </button>
+            <button className="btn ghost" disabled={!!busy} onClick={() => run('clear', () => api('email.clearClientConfig'))}>Usar otro cliente OAuth</button>
+          </div>
+          <p className="muted small">Tu ID y secreto de cliente se conservan: no hace falta crear ni pegar nada nuevo para volver a conectar.</p>
         </div>
       )}
       {status.state === 'connected' && (
         <div className="row">
+          {!status.canSend && <button className="btn" disabled={!!busy} onClick={() => run('connect', () => api('email.connect', { send: true }), 'Permiso para enviarte avisos concedido.')}>Permitir enviarme avisos por correo</button>}
           <button className="btn danger" disabled={!!busy} onClick={() => run('disconnect', () => api('email.disconnect'), 'Cuenta desconectada y acceso revocado.')}>Desconectar</button>
         </div>
       )}
+      <p className="muted small">Para que Google no corte la conexión cada 7 días, tu proyecto de Google Cloud debe estar publicado (Audiencia → «Publicar app»), no en modo «Prueba».</p>
       {busy === 'connect' && <p className="muted small">Se ha abierto tu navegador con la pantalla de Google. Hormiga nunca ve tu contraseña.</p>}
       {error && <Callout tone="danger">{error}</Callout>}
     </div>

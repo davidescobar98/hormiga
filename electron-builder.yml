@@ -12,13 +12,18 @@ files:
   - '!**/*.{ts,tsx,md,markdown}'
   - '!**/{test,tests,__tests__,docs,example,examples}/**'
   - '!**/.env*'
-# Automatic updates: the installed app checks the public GitHub Releases of this repository.
+# Automatic updates: the installed app checks the public GitHub Releases of the download-only repository (no source code
+# there). Releases up to 0.5.0 were published in «hormiga»; 1.0.0 is published in both so older installs update too.
 publish:
   provider: github
   owner: davidescobar98
-  repo: hormiga
+  repo: hormiga-app
   releaseType: release
 asar: true
+# Tray icon at runtime.
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
 # pdf.js loads its worker module dynamically; keep it outside the archive for reliable ESM loading.
 asarUnpack:
   - node_modules/pdfjs-dist/**

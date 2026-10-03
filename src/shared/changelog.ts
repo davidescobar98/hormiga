@@ -7,6 +7,24 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '1.0.0',
+    date: '2026-10-03',
+    items: [
+      'Nueva sección «Previsión»: cómo evolucionará el saldo de tu cuenta corriente día a día en los próximos 60 días (nóminas, recibos, cuotas y tu gasto habitual), cómo acabarás el mes, los meses que suelen costarte más y un plan de ahorro con recortes concretos que puedes convertir en presupuestos con un clic.',
+      'Tus ingresos, agrupados por quién te paga: nómina, pagas extra y lo que te transfiere tu propia empresa aparte de la nómina (horas extra, incentivos) cuentan como ingresos previsibles.',
+      '«Pregunta a Hormiga»: un asistente que responde con tus datos («¿cuánto gasté en restaurantes en mayo?», «¿cómo acabaré el mes?», «¿cómo puedo ahorrar más?») sin enviarlos a ningún sitio. Ctrl+K para buscar cualquier página o ayuda.',
+      'Nueva sección «Ayuda» con guías cortas de cada parte de la app, y un menú más sencillo agrupado en Ahorrar, Invertir y Más.',
+      'Perfiles: varias personas en el mismo ordenador, cada una con su foto y sus datos totalmente separados (movimientos, documentos, Gmail, PIN y copias).',
+      'Avisos importantes por email a tu propia dirección (opcional) y resumen semanal los lunes. Avisos nuevos: saldo bajo previsto, gasto por encima de lo habitual y meses caros que se acercan.',
+      'Hormiga puede quedarse en la bandeja del sistema al cerrar la ventana, abrirse al iniciar Windows y mostrar un punto rojo en la barra de tareas cuando hay avisos.',
+      '«Comprobar mis números» (Ajustes): verifica que todo cuadra (ahorro, categorías, saldos frente a extractos, préstamos, presupuestos, duplicados) y explica cualquier diferencia; las reglas demasiado generales se pueden borrar desde ahí.',
+      'Gmail ya no pide volver a crear las credenciales: Hormiga las conserva hasta que tú las borres. Si la conexión caduca cada 7 días, la app te explica cómo evitarlo (publicar tu app de Google Cloud).',
+      'Importación validada con los formatos de exportación de BBVA, CaixaBank, imagin, Santander, Sabadell, ING, Openbank, Bankinter, N26 y Revolut, además de cualquier CSV con columnas de cargo y abono. Volver a importar un extracto que se solapa con otro ya no duplica movimientos.',
+      'Corregido: los presupuestos y medias usaban meses incompletos (un recibo de fin de mes aún no importado bajaba la media) y un mes con dos cuotas inflaba la media; ahora se usa lo habitual (mediana) de meses completos.',
+      'Corregido: ya no se crean reglas sobre operaciones genéricas como Bizum o transferencias, que mezclaban gastos y devoluciones en una sola categoría.',
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-10-03',
     items: [

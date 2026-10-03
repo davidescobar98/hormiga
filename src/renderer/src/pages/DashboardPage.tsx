@@ -169,6 +169,7 @@ export function DashboardPage() {
       </section>
 
       <AlertsCard />
+      <ForecastTeaser />
 
       <div className="grid grid-main">
         <Card title="Evolución" hint="Gasto, ingresos y ahorro por mes" actions={<MonthlyLegend showIncome={d.monthly.some((m) => m.incomeCents > 0)} />}>
@@ -239,5 +240,41 @@ export function DashboardPage() {
         </p>
       )}
     </div>
+  );
+}
+
+/** The next weeks at a glance; the detail lives in «Previsión». */
+function ForecastTeaser() {
+  const q = useQuery(() => api('forecast.overview'), []);
+  const navigate = useNavigate();
+  const o = q.data;
+  if (!o || !o.hasData) return null;
+  const next = o.upcoming.slice(0, 3);
+  const plan = o.levers.filter((l) => l.suggested).reduce((t, l) => t + l.monthlyCents, 0);
+  return (
+    <Card title="Próximas semanas" actions={<button className="btn sm" onClick={() => navigate('forecast')}>Ver previsión</button>}>
+      <div className="row" style={{ gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {o.balance && (
+          <div>
+            <div className="stat-label">Saldo más bajo previsto</div>
+            <div className={o.balance.risk === 'ok' ? 'stat-value num' : 'stat-value num gain-down'}>{formatCents(o.balance.min.balanceCents)}</div>
+            <div className="stat-sub">el {o.balance.min.date.split('-').reverse().join('/')}</div>
+          </div>
+        )}
+        {next.length > 0 && (
+          <div style={{ minWidth: 220 }}>
+            <div className="stat-label">Próximos movimientos</div>
+            {next.map((e, i) => <div key={i} className="small">{e.date.slice(8, 10)}/{e.date.slice(5, 7)} · {e.label}: <span className="num">{formatCents(e.amountCents, { signed: true })}</span></div>)}
+          </div>
+        )}
+        {plan > 0 && (
+          <div>
+            <div className="stat-label">Podrías ahorrar más</div>
+            <div className="stat-value gain-up">+{formatCents(plan)}/mes</div>
+            <button className="btn link" onClick={() => navigate('forecast', { section: 'plan' })}>Ver tu plan de ahorro</button>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

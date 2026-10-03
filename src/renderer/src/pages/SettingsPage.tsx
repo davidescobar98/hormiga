@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, toApiError, useInvalidate, useQuery } from '../api';
 import { applyTheme } from '../App';
-import type { AppSettings, DetectionConfig, IncomeMode, Theme } from '../../../shared/types';
+import type { AppSettings, DetectionConfig, IncomeMode, SettingsPatch, Theme } from '../../../shared/types';
 import { Callout, Card, Dialog, Field, Loading, Segmented, useToast } from '../components/ui';
 import { EmailConnectPanel, GoalEditor, IncomeEditor } from '../components/flows';
 import { describeUpdate, useUpdateStatus } from '../components/UpdateBanner';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { AuditCard } from '../components/AuditCard';
+import { ProfilesCard } from '../components/Profiles';
 import { AlertsSettingsCard, SecurityCard } from '../components/SecuritySettings';
 
 const SECTIONS = [
@@ -40,7 +42,7 @@ export function SettingsPage({ initialSection }: { initialSection?: string }) {
     if (initialSection) refs.current[initialSection]?.scrollIntoView({ block: 'start' });
   }, [initialSection, settings.data]);
 
-  const update = async (patch: Partial<AppSettings>, ok = 'Ajustes guardados.') => {
+  const update = async (patch: SettingsPatch, ok = 'Ajustes guardados.') => {
     try {
       const s = await api('settings.update', patch);
       if (patch.theme) applyTheme(s.theme);
@@ -122,6 +124,14 @@ export function SettingsPage({ initialSection }: { initialSection?: string }) {
 
       <section ref={(el) => { refs.current.alerts = el; }}>
         <AlertsSettingsCard settings={s} />
+      </section>
+
+      <section ref={(el) => { refs.current.profiles = el; }}>
+        <ProfilesCard />
+      </section>
+
+      <section ref={(el) => { refs.current.audit = el; }}>
+        <AuditCard />
       </section>
 
       <section ref={(el) => { refs.current.privacy = el; }}>

@@ -3,6 +3,7 @@ import type { Channel, EventName } from './api';
 /** Allow-list used by the preload script. Kept free of runtime dependencies. */
 export const CHANNELS = [
   'app.info', 'app.completeOnboarding',
+  'profiles.list', 'profiles.create', 'profiles.update', 'profiles.switch', 'profiles.setAskOnStart', 'profiles.delete',
   'settings.get', 'settings.update',
   'categories.list', 'categories.create', 'categories.update', 'categories.delete',
   'transactions.list', 'transactions.get', 'transactions.update',
@@ -28,6 +29,7 @@ export const CHANNELS = [
   'pots.overview', 'pots.save', 'pots.delete', 'pots.movements', 'pots.addMovement', 'pots.deleteMovement',
   'wealth.overview', 'wealth.saveAsset', 'wealth.deleteAsset', 'wealth.valuations', 'wealth.saveValuation', 'wealth.deleteValuation',
   'wealth.loanSchedule', 'wealth.earlyRepayment', 'market.search', 'market.returns',
+  'forecast.overview', 'budgets.setMany', 'assistant.ask', 'notify.testEmail', 'data.audit',
   'stocks.overview', 'stocks.refresh', 'stocks.addWatch', 'stocks.removeWatch', 'stocks.setTarget', 'stocks.addTrade', 'stocks.deleteTrade',
   'shell.openHelp',
 ] as const satisfies readonly Channel[];
@@ -42,4 +44,4 @@ export const EVENTS = ['sync.progress', 'sync.finished', 'data.changed', 'update
 export const IPC_PREFIX = 'hormiga:';
 
 /** The only channels allowed while the app is locked (everything else is refused in the main process). */
-export const LOCK_CHANNELS: readonly string[] = ['lock.status', 'lock.unlockPin', 'lock.unlockHello', 'app.info', 'app.updateStatus', 'app.installUpdate'];
+export const LOCK_CHANNELS: readonly string[] = ['lock.status', 'lock.unlockPin', 'lock.unlockHello', 'app.info', 'app.updateStatus', 'app.installUpdate', 'profiles.list', 'profiles.switch'];

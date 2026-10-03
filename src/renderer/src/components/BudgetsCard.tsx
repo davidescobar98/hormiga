@@ -78,7 +78,7 @@ export function BudgetsCard() {
               <div className="stack" style={{ marginTop: 8 }}>
                 {b.suggestions.map((s) => (
                   <div key={s.categoryId} className="row" style={{ justifyContent: 'space-between' }}>
-                    <span className="small">{s.name} <span className="muted">· media {formatCents(s.averageCents)}/mes</span></span>
+                    <span className="small">{s.name} <span className="muted">· lo habitual: {formatCents(s.averageCents)}/mes</span></span>
                     <button className="btn sm ghost" onClick={async () => { if (await save(s.categoryId, s.suggestedCents)) toast({ tone: 'info', message: `Presupuesto de ${s.name}: ${formatCents(s.suggestedCents)}/mes.` }); }}>
                       Usar {formatCents(s.suggestedCents)}
                     </button>
@@ -130,7 +130,7 @@ function BudgetDialog({ initial, categories, line, onClose, onSave }: {
             </select>
           </Field>
         )}
-        <Field label="Límite al mes" htmlFor="bd-amount" help={line?.averageCents ? `Media de tus últimos 3 meses: ${formatCents(line.averageCents)}` : undefined}>
+        <Field label="Límite al mes" htmlFor="bd-amount" help={line?.averageCents ? `Lo habitual en tus 3 últimos meses completos (mediana): ${formatCents(line.averageCents)}` : undefined}>
           <EuroInput id="bd-amount" valueCents={amount} onChange={setAmount} />
         </Field>
       </div>

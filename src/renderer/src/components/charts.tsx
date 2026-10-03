@@ -18,6 +18,7 @@ export function chartColors() {
     grid: cssVar('--chart-grid', '#e6e3da'),
     muted: cssVar('--muted', '#69717d'),
     ink: cssVar('--ink', '#1c2430'),
+    surface: cssVar('--surface', '#ffffff'),
   };
 }
 

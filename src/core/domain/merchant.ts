@@ -157,3 +157,14 @@ export function normalizeMerchant(descriptionRaw: string): MerchantResult {
   const key = tokens.join(' ') || withoutPrefix || text || 'DESCONOCIDO';
   return { key, display: titleCase(key), raw: withoutPrefix || text, known: null };
 }
+
+/**
+ * "Merchants" that are really a kind of operation (Bizum, transfers, ATM…) or a card/account number: one rule for
+ * them would put every Bizum (sent and received, for dinners or flights) in the same category. Rules by merchant are
+ * never offered for these; categorise them one by one or with a rule on a word of the concept.
+ */
+const GENERIC_MERCHANTS = new Set(['BIZUM', 'TRANSFERENCIA', 'TRANSFERENCIAS', 'TRANSFERENCIA RECIBIDA', 'TRANSFERENCIA REALIZADA', 'TRANSFERENCIA EMITIDA', 'CAJERO', 'EFECTIVO', 'RECIBO', 'ADEUDO', 'PAGO CON TARJETA', 'COMPRA', 'TRASPASO', 'INGRESO', 'ABONO', 'DEVOLUCION']);
+
+export function isGenericMerchant(key: string): boolean {
+  return GENERIC_MERCHANTS.has(key);
+}

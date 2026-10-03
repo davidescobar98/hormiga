@@ -13,6 +13,10 @@ import { GoalsPage } from './pages/GoalsPage';
 import { WealthPage } from './pages/WealthPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { StocksPage } from './pages/StocksPage';
+import { ForecastPage } from './pages/ForecastPage';
+import { HelpPage } from './pages/HelpPage';
+import { Assistant, CommandPalette } from './components/Assistant';
+import { ProfileGate, ProfileSwitcher } from './components/Profiles';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { PendingPasswordPrompt } from './components/PasswordPrompt';
 import { WhatsNew } from './components/WhatsNew';
@@ -21,7 +25,7 @@ import { LockScreen } from './components/LockScreen';
 import type { LockStatus } from '../../shared/types';
 import type { Theme } from '../../shared/types';
 
-export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'stocks' | 'import' | 'settings';
+export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'stocks' | 'import' | 'settings' | 'forecast' | 'help';
 
 export interface NavParams {
   categoryId?: number;
@@ -37,20 +41,44 @@ export interface NavParams {
 const NavContext = createContext<(page: PageId, params?: NavParams) => void>(() => {});
 export const useNavigate = () => useContext(NavContext);
 
-const NAV: { id: PageId; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Resumen', icon: 'home' },
-  { id: 'transactions', label: 'Movimientos', icon: 'list' },
-  { id: 'accounts', label: 'Cuentas', icon: 'wallet' },
-  { id: 'categories', label: 'Categorías', icon: 'tag' },
-  { id: 'recurring', label: 'Recurrentes', icon: 'repeat' },
-  { id: 'analytics', label: 'Análisis', icon: 'chart' },
-  { id: 'savings', label: 'Ahorro', icon: 'piggy' },
-  { id: 'goals', label: 'Metas', icon: 'target' },
-  { id: 'wealth', label: 'Patrimonio', icon: 'briefcase' },
-  { id: 'stocks', label: 'Bolsa', icon: 'trend' },
-  { id: 'import', label: 'Documentos', icon: 'file' },
-  { id: 'settings', label: 'Ajustes', icon: 'settings' },
+/** Navigation grouped by what you want to do (a short, calm sidebar). */
+const NAV_GROUPS: { label: string | null; items: { id: PageId; label: string; icon: string }[] }[] = [
+  {
+    label: null,
+    items: [
+      { id: 'dashboard', label: 'Resumen', icon: 'home' },
+      { id: 'forecast', label: 'Previsión', icon: 'sparkle' },
+      { id: 'transactions', label: 'Movimientos', icon: 'list' },
+      { id: 'accounts', label: 'Cuentas', icon: 'wallet' },
+    ],
+  },
+  {
+    label: 'Ahorrar',
+    items: [
+      { id: 'savings', label: 'Ahorro', icon: 'piggy' },
+      { id: 'goals', label: 'Metas', icon: 'target' },
+      { id: 'recurring', label: 'Recurrentes', icon: 'repeat' },
+    ],
+  },
+  {
+    label: 'Invertir',
+    items: [
+      { id: 'wealth', label: 'Patrimonio', icon: 'briefcase' },
+      { id: 'stocks', label: 'Bolsa', icon: 'trend' },
+    ],
+  },
+  {
+    label: 'Más',
+    items: [
+      { id: 'analytics', label: 'Análisis', icon: 'chart' },
+      { id: 'categories', label: 'Categorías', icon: 'tag' },
+      { id: 'import', label: 'Documentos', icon: 'file' },
+      { id: 'settings', label: 'Ajustes', icon: 'settings' },
+      { id: 'help', label: 'Ayuda', icon: 'info' },
+    ],
+  },
 ];
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 export function applyTheme(theme: Theme): void {
   if (theme === 'system') document.documentElement.removeAttribute('data-theme');
@@ -65,7 +93,9 @@ export function App() {
   return (
     <DataVersionContext.Provider value={ctx}>
       <ToastProvider>
-        <LockGate />
+        <ProfileGate>
+          <LockGate />
+        </ProfileGate>
       </ToastProvider>
     </DataVersionContext.Provider>
   );
@@ -143,17 +173,21 @@ function Shell({ lockEnabled }: { lockEnabled: boolean }) {
           {page === 'goals' && <GoalsPage />}
           {page === 'wealth' && <WealthPage />}
           {page === 'stocks' && <StocksPage key={params.section ?? ''} initialSection={params.section} />}
+          {page === 'forecast' && <ForecastPage key={params.section ?? ''} initialSection={params.section} />}
+          {page === 'help' && <HelpPage key={params.section ?? ''} initialSection={params.section} />}
           {page === 'import' && <ImportPage key={JSON.stringify(params)} initial={params} />}
           {page === 'settings' && <SettingsPage key={params.section ?? ''} initialSection={params.section} />}
         </main>
       </div>
       <PendingPasswordPrompt />
+      <Assistant />
+      <CommandPalette pages={NAV} />
       <WhatsNew lastSeenVersion={settings.data.lastSeenVersion} />
     </NavContext.Provider>
   );
 }
 
-function Sidebar({ page, onNavigate, lockEnabled }: { page: PageId; onNavigate: (p: PageId) => void; lockEnabled: boolean }) {
+function Sidebar({ page, onNavigate, lockEnabled }: { page: PageId; onNavigate: (p: PageId, params?: NavParams) => void; lockEnabled: boolean }) {
   const review = useQuery(() => api('import.reviewSummary'), []);
   const email = useQuery(() => api('email.status'), []);
   const lastSync = email.data?.lastSyncAt ? new Date(email.data.lastSyncAt) : null;
@@ -166,14 +200,23 @@ function Sidebar({ page, onNavigate, lockEnabled }: { page: PageId; onNavigate: 
           <div className="brand-tagline">cada céntimo cuenta</div>
         </div>
       </div>
-      {NAV.map((n) => (
-        <button key={n.id} className="nav-item" aria-current={page === n.id ? 'page' : undefined} onClick={() => onNavigate(n.id)}>
-          <Icon name={n.icon} />
-          {n.label}
-          {n.id === 'import' && (review.data?.documents ?? 0) > 0 && (
-            <span className="nav-badge" title="Documentos pendientes de revisión">{review.data!.documents}</span>
-          )}
-        </button>
+      <ProfileSwitcher onManage={() => onNavigate('settings', { section: 'profiles' })} />
+      {NAV_GROUPS.map((g) => (
+        <div key={g.label ?? 'main'} role="group" aria-label={g.label ?? 'Principal'}>
+          {g.label && <div className="nav-group" aria-hidden>{g.label}</div>}
+          {g.items.map((n) => (
+            <button key={n.id} className="nav-item" aria-current={page === n.id ? 'page' : undefined} onClick={() => onNavigate(n.id)}>
+              <Icon name={n.icon} />
+              {n.label}
+              {n.id === 'import' && (review.data?.documents ?? 0) > 0 && (
+                <span className="nav-badge" title="Documentos pendientes de revisión">{review.data!.documents}</span>
+              )}
+              {n.id === 'settings' && (email.data?.state === 'reauth_required' || (email.data?.message && email.data.state !== 'connected')) && (
+                <span className="nav-badge" title="Gmail necesita que vuelvas a conectarlo">!</span>
+              )}
+            </button>
+          ))}
+        </div>
       ))}
       <div className="sidebar-footer">
         {lockEnabled && <button className="btn sm ghost" onClick={() => void api('lock.lockNow')}><Icon name="lock" size={15} /> Bloquear</button>}
