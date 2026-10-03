@@ -14,6 +14,7 @@ import { WealthService } from './services/wealthService';
 import { AccountsService } from './services/accountsService';
 import { BudgetsService } from './services/budgetsService';
 import { YahooMarketProvider, type MarketProvider } from './market/yahoo';
+import { StocksService } from './services/stocksService';
 
 export interface CoreDeps {
   db: Database;
@@ -43,6 +44,7 @@ export interface Core {
   wealth: WealthService;
   accounts: AccountsService;
   budgets: BudgetsService;
+  stocks: StocksService;
 }
 
 /** Composition root of the application layer (no Electron dependencies: fully testable in Node). */
@@ -101,5 +103,22 @@ export function createCore(deps: CoreDeps): Core {
   };
   const budgets = new BudgetsService(repos, analytics, deps.now);
   budgets.pendingTransferReviews = () => accounts.counterparties().filter((c) => c.needsReview).length;
-  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts, budgets };
+  const stocks = new StocksService(repos, market, deps.now);
+  wealth.stocksValue = (date) => stocks.valueAt(date);
+  stocks.liquidity = () => {
+    const e = wealth.emergency(wealth.potDTOs());
+    return {
+      liquidCents: e.liquidCents,
+      emergencyTargetCents: e.monthsUsed > 0 && e.essentialMonthlyCents > 0 ? e.essentialMonthlyCents * e.recommendedMonths : null,
+    };
+  };
+  budgets.stockAlerts = () => {
+    try {
+      return stocks.alerts();
+    } catch (err) {
+      deps.log.warn('stocks.alerts_failed', { err });
+      return [];
+    }
+  };
+  return { repos, categorization, recurring, importer, analytics, sync, data, gmailAuth, wealth, accounts, budgets, stocks };
 }

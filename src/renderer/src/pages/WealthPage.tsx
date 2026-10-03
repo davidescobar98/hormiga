@@ -70,6 +70,14 @@ export function WealthPage() {
             </div>
           </section>
 
+          {w.stocksPortfolio && (
+            <Callout tone={w.stocksMaybeDuplicated ? 'warning' : 'info'} icon="trend">
+              Incluye tu cartera de «Bolsa»: <strong>{formatCents(w.stocksPortfolio.valueCents)}</strong> a precio de mercado ({formatCents(w.stocksPortfolio.costCents)} invertidos).{' '}
+              {w.stocksMaybeDuplicated && 'También tienes un activo manual de tipo «Acciones»: si es la misma cartera, bórralo para no contarla dos veces. '}
+              <button className="btn link" onClick={() => navigate('stocks')}>Ver cartera</button>
+            </Callout>
+          )}
+
           {w.accounts.length > 0 && (
             <Card title="Cuentas bancarias" hint="Saldo calculado con tus movimientos" actions={<button className="btn sm" onClick={() => navigate('accounts')}>Gestionar cuentas</button>}>
               {w.accountsWithoutBalance > 0 && (

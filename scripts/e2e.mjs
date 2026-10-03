@@ -334,6 +334,24 @@ try {
     await d.getByRole('button', { name: 'Cerrar' }).last().click();
   });
 
+  await step('Bolsa: register a buy without market data (nothing sent)', async () => {
+    await page.getByRole('button', { name: 'Bolsa' }).click();
+    await page.getByText('No es asesoramiento financiero.').waitFor();
+    await page.getByRole('button', { name: 'Activar datos de mercado' }).waitFor();
+    await page.locator('.page-header').getByRole('button', { name: 'Registrar operación' }).click();
+    const d = page.getByRole('dialog');
+    await d.getByLabel('Símbolo (ticker)').fill('PRUEBA.MC');
+    await d.getByLabel('Número de acciones').fill('3');
+    await d.getByLabel(/Precio por acción/).fill('10,5');
+    await d.getByLabel('Comisiones y gastos (€)').fill('1');
+    await d.getByText(/Total pagado: 32,50\s€/).waitFor();
+    await d.getByRole('button', { name: 'Guardar' }).click();
+    const card = page.getByRole('article', { name: 'PRUEBA.MC' });
+    await card.getByText(/3 acciones/).waitFor();
+    await card.getByText(/Invertido 32,50\s€/).waitFor();
+    await card.getByText(/Activa los datos de mercado/).waitFor();
+  });
+
   await step('export CSV', async () => {
     const out = join(work, 'movimientos.csv');
     await page.getByRole('button', { name: 'Ajustes' }).click();

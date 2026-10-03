@@ -79,7 +79,7 @@ Revisión realizada al cerrar el MVP. Estado: ✅ aplicado · ⚠️ limitación
 |---|---|---|
 | Google (OAuth + Gmail API, solo lectura) | Si conectas Gmail | Token OAuth; se leen solo los emails candidatos a extracto |
 | GitHub Releases (`github.com/davidescobar98/hormiga`) | Al abrir la app instalada y cada 6 h (desactivable en Ajustes → Actualizaciones) | Nada tuyo: solo la petición de la última versión (IP y versión de la app, como cualquier descarga) |
-| Yahoo Finance (datos públicos) | Solo si activas «Consultar rentabilidades pasadas» y buscas | El texto buscado (nombre, ticker o ISIN) o el símbolo elegido; nunca importes ni posiciones |
+| Yahoo Finance (datos públicos) | Solo si activas los datos de mercado: al buscar, y cada 2 horas con la app abierta si sigues valores o tienes cartera en «Bolsa» | El texto buscado (nombre, ticker o ISIN), los símbolos que sigues o tienes y los pares de divisa `EURxxx=X`; nunca importes, cantidades ni operaciones |
 
 Actualizaciones: electron-updater descarga el instalador de la release y comprueba su SHA-512 (publicado en
 `latest.yml`) antes de instalarlo en silencio al reiniciar. Los ejecutables no están firmados con un certificado de

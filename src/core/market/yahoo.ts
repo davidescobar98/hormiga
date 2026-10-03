@@ -1,6 +1,7 @@
 import { toIso } from '../../shared/dates';
 import { AppError } from '../errors';
 import type { PricePoint } from '../domain/returns';
+import type { DailyClose } from '../domain/stocks';
 
 /*
  * Public market data used ONLY to look up past returns of a fund/ETF/stock the user chooses.
@@ -22,10 +23,24 @@ export interface MarketHistory {
   points: PricePoint[];
 }
 
+export interface DailyHistory {
+  symbol: string;
+  name: string;
+  currency: string | null;
+  exchange: string | null;
+  type: string | null;
+  /** Latest quote (may be intraday or delayed). */
+  live: { date: string; price: number } | null;
+  /** Daily closes (not adjusted for dividends: comparable with your purchase price), ascending. */
+  points: DailyClose[];
+}
+
 export interface MarketProvider {
   readonly source: string;
   search(query: string): Promise<MarketQuote[]>;
   monthlyHistory(symbol: string): Promise<MarketHistory>;
+  /** Last ~2 years of daily closes. */
+  dailyHistory?(symbol: string): Promise<DailyHistory>;
 }
 
 type FetchFn = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -80,5 +95,46 @@ export class YahooMarketProvider implements MarketProvider {
       points.push({ date: toIso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()), price: p });
     });
     return { symbol: r.meta?.symbol ?? symbol, name: r.meta?.longName ?? r.meta?.shortName ?? symbol, currency: r.meta?.currency ?? null, points };
+  }
+
+  async dailyHistory(symbol: string): Promise<DailyHistory> {
+    if (!SYMBOL_RE.test(symbol)) throw new AppError('VALIDATION', 'Símbolo no válido.');
+    const data = (await this.get(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1d`)) as {
+      chart?: {
+        result?: {
+          meta?: { currency?: string; longName?: string; shortName?: string; symbol?: string; fullExchangeName?: string; exchangeName?: string; instrumentType?: string; regularMarketPrice?: number; regularMarketTime?: number; gmtoffset?: number };
+          timestamp?: number[];
+          indicators?: { quote?: { close?: (number | null)[] }[] };
+        }[];
+      };
+    };
+    const r = data.chart?.result?.[0];
+    if (!r || !r.timestamp?.length) throw new AppError('NOT_FOUND', `No hay cotizaciones disponibles para «${symbol}».`);
+    const offset = r.meta?.gmtoffset ?? 0;
+    // Session date in the exchange's own time zone.
+    const day = (t: number) => {
+      const d = new Date((t + offset) * 1000);
+      return toIso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    };
+    const closes = r.indicators?.quote?.[0]?.close ?? [];
+    const points: DailyClose[] = [];
+    r.timestamp.forEach((t, i) => {
+      const p = closes[i];
+      if (typeof p !== 'number' || !Number.isFinite(p) || p <= 0) return;
+      const date = day(t);
+      if (points.length && points[points.length - 1]!.date === date) points[points.length - 1] = { date, close: p };
+      else points.push({ date, close: p });
+    });
+    const m = r.meta ?? {};
+    const live = typeof m.regularMarketPrice === 'number' && m.regularMarketPrice > 0 && m.regularMarketTime ? { date: day(m.regularMarketTime), price: m.regularMarketPrice } : null;
+    return {
+      symbol: m.symbol ?? symbol,
+      name: m.longName ?? m.shortName ?? symbol,
+      currency: m.currency ?? null,
+      exchange: m.fullExchangeName ?? m.exchangeName ?? null,
+      type: m.instrumentType ?? null,
+      live,
+      points,
+    };
   }
 }

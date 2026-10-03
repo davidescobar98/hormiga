@@ -75,8 +75,22 @@ export class AccountsService {
         )
         .map((r) => [r.account_id, r]),
     );
+    const closings = new Map<number, { date: string; cents: number }[]>();
+    for (const r of this.repos.db.all<{ account_id: number; d: string; b: number }>(
+      'SELECT DISTINCT account_id, end_balance_date AS d, end_balance_cents AS b FROM statements WHERE account_id IS NOT NULL AND end_balance_cents IS NOT NULL AND end_balance_date IS NOT NULL ORDER BY end_balance_date',
+    )) {
+      closings.set(r.account_id, [...(closings.get(r.account_id) ?? []), { date: r.d, cents: Number(r.b) }]);
+    }
     return this.repos.accounts.list().map((a) => {
       const f = flows.get(a.id) ?? [];
+      const checks = a.sourceKind === 'account' ? (closings.get(a.id) ?? []) : [];
+      const reconciliation = { checked: 0, mismatches: [] as { date: string; statementCents: number; calculatedCents: number }[] };
+      for (const c of checks) {
+        const calc = this.balanceOf(a, f, c.date);
+        if (calc === null) continue;
+        reconciliation.checked++;
+        if (calc !== c.cents) reconciliation.mismatches.push({ date: c.date, statementCents: c.cents, calculatedCents: calc });
+      }
       const recent = f.filter((x) => x.date > from30 && x.date <= today);
       const s = stats.get(a.id);
       return {
@@ -96,6 +110,7 @@ export class AccountsService {
         lastDate: s?.last ?? (f.length ? f.map((x) => x.date).sort().at(-1)! : null),
         last30InCents: recent.filter((x) => x.amountCents > 0).reduce((t, x) => t + x.amountCents, 0),
         last30OutCents: -recent.filter((x) => x.amountCents < 0).reduce((t, x) => t + x.amountCents, 0),
+        reconciliation,
       };
     });
   }

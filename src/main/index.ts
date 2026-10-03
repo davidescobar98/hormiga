@@ -226,6 +226,23 @@ async function scheduledSync(runtime: Runtime): Promise<void> {
   await checkAlerts(runtime);
 }
 
+/** While the app is open, refreshes stock prices every 2 hours (only symbols leave the computer) and checks signals. */
+async function scheduledMarket(runtime: Runtime): Promise<void> {
+  const settings = runtime.core.repos.settings.getSettings();
+  if (!settings.onboardingCompleted || !settings.marketDataEnabled) return;
+  const last = runtime.core.repos.settings.getRaw<string>('stocks.lastRefresh');
+  if (last && Date.now() - Date.parse(last) < 2 * 3600000) return;
+  const tracked = runtime.core.repos.db.get<{ n: number }>('SELECT (SELECT COUNT(*) FROM stock_watchlist) + (SELECT COUNT(*) FROM stock_trades) AS n');
+  if (!tracked || Number(tracked.n) === 0) return;
+  try {
+    await runtime.core.stocks.refresh(false);
+    send('data.changed', { reason: 'stocks' });
+  } catch (err) {
+    log.warn('stocks.scheduled_failed', { code: toErrorPayload(err).code });
+  }
+  await checkAlerts(runtime);
+}
+
 /** Stores new alerts (always visible in the app) and, if enabled, shows them as Windows notifications. */
 async function checkAlerts(runtime: Runtime): Promise<void> {
   try {
@@ -307,6 +324,8 @@ app.whenReady().then(async () => {
   }, 30000);
   setInterval(() => void scheduledSync(runtime), 10 * 60000);
   setInterval(() => void checkAlerts(runtime), 60 * 60000);
+  setTimeout(() => void scheduledMarket(runtime), 60000);
+  setInterval(() => void scheduledMarket(runtime), 20 * 60000);
   log.info('app.started', { version: app.getVersion(), packaged: app.isPackaged });
 
   app.on('activate', () => {

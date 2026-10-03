@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { WealthPage } from './pages/WealthPage';
 import { AccountsPage } from './pages/AccountsPage';
+import { StocksPage } from './pages/StocksPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { PendingPasswordPrompt } from './components/PasswordPrompt';
 import { WhatsNew } from './components/WhatsNew';
@@ -20,7 +21,7 @@ import { LockScreen } from './components/LockScreen';
 import type { LockStatus } from '../../shared/types';
 import type { Theme } from '../../shared/types';
 
-export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'import' | 'settings';
+export type PageId = 'dashboard' | 'transactions' | 'accounts' | 'categories' | 'recurring' | 'analytics' | 'savings' | 'goals' | 'wealth' | 'stocks' | 'import' | 'settings';
 
 export interface NavParams {
   categoryId?: number;
@@ -46,6 +47,7 @@ const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: 'savings', label: 'Ahorro', icon: 'piggy' },
   { id: 'goals', label: 'Metas', icon: 'target' },
   { id: 'wealth', label: 'Patrimonio', icon: 'briefcase' },
+  { id: 'stocks', label: 'Bolsa', icon: 'trend' },
   { id: 'import', label: 'Documentos', icon: 'file' },
   { id: 'settings', label: 'Ajustes', icon: 'settings' },
 ];
@@ -140,6 +142,7 @@ function Shell({ lockEnabled }: { lockEnabled: boolean }) {
           {page === 'savings' && <SavingsPage />}
           {page === 'goals' && <GoalsPage />}
           {page === 'wealth' && <WealthPage />}
+          {page === 'stocks' && <StocksPage key={params.section ?? ''} initialSection={params.section} />}
           {page === 'import' && <ImportPage key={JSON.stringify(params)} initial={params} />}
           {page === 'settings' && <SettingsPage key={params.section ?? ''} initialSection={params.section} />}
         </main>

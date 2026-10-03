@@ -352,6 +352,57 @@ CREATE TABLE alerts (
 CREATE INDEX idx_alerts_created ON alerts(created_at);
 `,
   },
+  {
+    version: 6,
+    name: 'stocks: watchlist, trades, prices and signals',
+    sql: `
+-- Public market data cache (only the symbol is ever sent to the data provider).
+CREATE TABLE market_symbols (
+  symbol TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  currency TEXT,
+  exchange TEXT,
+  type TEXT,
+  live_price REAL,
+  live_date TEXT,
+  fetched_at TEXT
+);
+CREATE TABLE market_prices (
+  symbol TEXT NOT NULL,
+  date TEXT NOT NULL,
+  close REAL NOT NULL CHECK (close > 0),
+  PRIMARY KEY (symbol, date)
+) WITHOUT ROWID;
+-- Stocks you follow, with an optional purchase price you are waiting for.
+CREATE TABLE stock_watchlist (
+  symbol TEXT PRIMARY KEY,
+  target_price REAL CHECK (target_price IS NULL OR target_price > 0),
+  created_at TEXT NOT NULL
+);
+-- Your own buys and sells (entered by you). Euros are fixed with each trade's exchange rate.
+CREATE TABLE stock_trades (
+  id INTEGER PRIMARY KEY,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('buy','sell')),
+  date TEXT NOT NULL,
+  quantity REAL NOT NULL CHECK (quantity > 0),
+  price REAL NOT NULL CHECK (price > 0),
+  currency TEXT NOT NULL,
+  fx_per_eur REAL NOT NULL CHECK (fx_per_eur > 0),
+  fees_cents INTEGER NOT NULL DEFAULT 0 CHECK (fees_cents >= 0),
+  note TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_stock_trades_symbol ON stock_trades(symbol, date);
+-- Since when each signal is active (an alert is raised once per episode).
+CREATE TABLE stock_signal_state (
+  symbol TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  active_since TEXT NOT NULL,
+  PRIMARY KEY (symbol, kind)
+);
+`,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

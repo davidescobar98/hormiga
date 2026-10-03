@@ -271,7 +271,7 @@ function PrivacyCard({ settings, info, dataDir, onToggleKeep, onToggleMarket, on
         </label>
         <label className="check">
           <input type="checkbox" checked={settings.marketDataEnabled} onChange={(e) => onToggleMarket(e.target.checked)} />
-          Consultar rentabilidades pasadas en internet (Yahoo Finance). Solo se envía el nombre, ticker o ISIN que busques; nunca tus datos ni importes.
+          Consultar datos de mercado en internet (Yahoo Finance): rentabilidades pasadas y cotizaciones de «Bolsa». Solo se envía el nombre, ticker o ISIN que busques y los símbolos que sigues; nunca tus datos, importes ni operaciones.
         </label>
         <div className="row">
           <button className="btn" disabled={!info?.retainedDocumentsCount || busy} onClick={() => act(() => api('import.deleteRetainedDocuments'), 'PDFs conservados eliminados.')}>Eliminar PDFs conservados</button>

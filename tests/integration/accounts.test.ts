@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeCore, type TestCore } from '../helpers/core';
 import { buildWebMovementsPdf, type WebRow } from '../helpers/synthetic-statement.mjs';
 import { Database } from '../../src/core/db/database';
-import { MIGRATIONS } from '../../src/core/db/migrations';
+import { LATEST_SCHEMA_VERSION, MIGRATIONS } from '../../src/core/db/migrations';
 
 // Fictitious "Últimos movimientos" statements of two accounts of the same person (newest first, running balance).
 const accountA: WebRow[] = [
@@ -32,6 +32,15 @@ describe('accounts, balances and transfers (service level)', () => {
     expect(tx('2026-09-12')).toMatchObject({ type: 'transfer' });
     expect(core.accounts.counterparties().find((c) => c.key === 'PERSONA FICTICIA UNO')).toMatchObject({ needsReview: true, sentCents: 150000 });
     expect(core.analytics.dashboard('2026-09').summary.spendingCents).toBe(2000 + 60000);
+  });
+
+  it('reconciles the calculated balance with each statement closing balance', async () => {
+    const core = makeCore({ now: '2026-09-30T10:00:00Z' });
+    await importA(core);
+    expect(core.accounts.list()[0]!.reconciliation).toEqual({ checked: 1, mismatches: [] });
+    // If the statement printed another closing balance, a movement would be missing or duplicated.
+    core.repos.db.run('UPDATE statements SET end_balance_cents = 95000');
+    expect(core.accounts.list()[0]!.reconciliation).toEqual({ checked: 1, mismatches: [{ date: '2026-09-20', statementCents: 95000, calculatedCents: 90000 }] });
   });
 
   it('beneficiary decisions reclassify past movements and feed a manual remunerated account', async () => {
@@ -131,7 +140,7 @@ describe('accounts, balances and transfers (service level)', () => {
     db.run("INSERT INTO categories(name, kind, color, is_system, system_key, created_at) VALUES ('Transferencias', 'neutral', '#000000', 1, 'transfers', ?)", ts);
     db.run("INSERT INTO transactions(document_id, fingerprint, date, description_raw, description_normalized, amount_cents, type, category_id, classification_source, created_at, updated_at) VALUES (1, 'f', '2026-01-02', 'x', 'X', -100, 'expense', 1, 'UNKNOWN', ?, ?)", ts, ts);
     db.migrate();
-    expect(db.schemaVersion).toBe(5);
+    expect(db.schemaVersion).toBe(LATEST_SCHEMA_VERSION);
     expect(db.get('SELECT name, bank, last4, source_kind FROM accounts')).toEqual({ name: 'BBVA · cuenta ···1234', bank: 'BBVA', last4: '1234', source_kind: 'account' });
     expect(db.get<{ account_id: number }>('SELECT account_id FROM transactions')!.account_id).toBe(1);
     expect(db.get<{ name: string }>("SELECT name FROM categories WHERE system_key = 'transfers'")!.name).toBe('Entre mis cuentas');

@@ -1,5 +1,5 @@
 import { formatCents } from '../../shared/money';
-import { addMonths, daysBetween, monthOf, monthRange, todayIso } from '../../shared/dates';
+import { addMonths, daysBetween, lastDayOfMonth, monthOf, monthRange, todayIso } from '../../shared/dates';
 import type { AssetDTO, EarlyRepaymentDTO, EmergencyInfo, LoanInfo, LoanScheduleRow, MarketQuoteDTO, MarketReturnsDTO, PotDTO, PotsOverview, WealthOverview } from '../../shared/types';
 import { INVESTMENT_TYPES } from '../../shared/types';
 import { potProgress } from '../domain/pots';
@@ -32,6 +32,8 @@ export class WealthService {
   /** Set by the composition root. */
   accounts: AccountsService | null = null;
   profile: () => FinancialProfile = () => DEFAULT_PROFILE;
+  /** Set by the composition root: value of your «Bolsa» portfolio at a date. */
+  stocksValue: ((date: string) => { valueCents: number; costCents: number }) | null = null;
 
   private today() {
     return todayIso(this.now());
@@ -178,8 +180,11 @@ export class WealthService {
     const accounts = (this.accounts?.list() ?? []).filter((a) => a.includeInNetWorth && a.sourceKind !== 'card');
     const accountsTotal = accounts.reduce((t, a) => t + (a.balanceCents ?? 0), 0);
     const invested = assets.filter((a) => INVESTMENT_TYPES.includes(a.type) && a.valueCents !== null && a.contributedCents !== null);
-    const investedValue = invested.reduce((s, a) => s + a.valueCents!, 0);
-    const investedContributed = invested.reduce((s, a) => s + a.contributedCents!, 0);
+    const stocks = this.stocksValue?.(today) ?? null;
+    const portfolio = stocks && (stocks.valueCents > 0 || stocks.costCents > 0) ? stocks : null;
+    const stocksNow = portfolio?.valueCents ?? 0;
+    const investedValue = invested.reduce((s, a) => s + a.valueCents!, 0) + stocksNow;
+    const investedContributed = invested.reduce((s, a) => s + a.contributedCents!, 0) + (portfolio?.costCents ?? 0);
     const starts = [
       ...vals.map((v) => v.date),
       ...refs.map((r) => r.loan?.startDate).filter((d): d is string => !!d),
@@ -190,6 +195,12 @@ export class WealthService {
     const from = first < addMonths(current, -35) ? addMonths(current, -35) : first;
     const months = monthRange(from, current);
     let history = starts.length ? netWorthHistory(refs, vals, months, today) : [];
+    if (history.length && portfolio && this.stocksValue) {
+      history = history.map((h) => {
+        const v = this.stocksValue!(h.month === current ? today : lastDayOfMonth(h.month)).valueCents;
+        return { ...h, assetsCents: h.assetsCents + v, netWorthCents: h.netWorthCents + v };
+      });
+    }
     if (history.length && this.accounts) {
       const balances = this.accounts.monthEndBalances(months);
       history = history.map((h, i) => {
@@ -203,14 +214,16 @@ export class WealthService {
       accounts,
       accountsTotalCents: accountsTotal,
       accountsWithoutBalance: accounts.filter((a) => a.balanceCents === null).length,
-      totalAssetsCents: nw.assetsCents + accountsTotal,
+      totalAssetsCents: nw.assetsCents + accountsTotal + stocksNow,
       totalLiabilitiesCents: nw.liabilitiesCents,
-      netWorthCents: nw.netWorthCents + accountsTotal,
+      netWorthCents: nw.netWorthCents + accountsTotal + stocksNow,
+      stocksPortfolio: portfolio,
+      stocksMaybeDuplicated: !!portfolio && assets.some((a) => a.type === 'stocks'),
       investedValueCents: investedValue,
       investedContributedCents: investedContributed,
       investedGainCents: investedValue - investedContributed,
       investedReturnBp: investedContributed > 0 ? Math.round(((investedValue - investedContributed) * 10000) / investedContributed) : null,
-      allocation: allocation([...assets.filter((a) => a.valueCents !== null).map((a) => ({ type: a.type, valueCents: a.valueCents! })), ...cashItems]),
+      allocation: allocation([...assets.filter((a) => a.valueCents !== null).map((a) => ({ type: a.type, valueCents: a.valueCents! })), ...cashItems, ...(stocksNow > 0 ? [{ type: 'stocks' as const, valueCents: stocksNow }] : [])]),
       history,
       potsSavedCents: this.pots.list().reduce((a, p) => a + p.savedCents, 0),
     };
@@ -251,7 +264,7 @@ export class WealthService {
   private requireMarket(): MarketProvider {
     if (!this.market) throw new AppError('MARKET_DISABLED', 'Consulta de mercado no disponible.');
     if (!this.marketEnabled()) {
-      throw new AppError('MARKET_DISABLED', 'Activa «Consultar rentabilidades pasadas en internet» para buscar datos de mercado. Solo se envía el nombre, ticker o ISIN que busques.');
+      throw new AppError('MARKET_DISABLED', 'Activa «Consultar datos de mercado en internet» (Ajustes → Privacidad) para buscar valores. Solo se envía el nombre, ticker o ISIN que busques.');
     }
     return this.market;
   }

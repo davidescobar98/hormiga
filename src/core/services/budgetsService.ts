@@ -23,6 +23,8 @@ export class BudgetsService {
 
   /** Set by the composition root: counterparties still to review. */
   pendingTransferReviews: () => number = () => 0;
+  /** Set by the composition root: buy/sell signals on stocks. */
+  stockAlerts: () => NewAlert[] = () => [];
 
   private today(): IsoDate {
     return todayIso(this.now());
@@ -184,6 +186,7 @@ export class BudgetsService {
     if (pending > 0) {
       out.push({ key: `transfers:${pending}:${month}`, kind: 'transfer_review', title: 'Confirma tus transferencias grandes', body: `${pending === 1 ? 'Hay 1 beneficiario' : `Hay ${pending} beneficiarios`} sin revisar. Mientras tanto se tratan como dinero movido a otra cuenta tuya.`, page: 'accounts', section: 'transfers' });
     }
+    out.push(...this.stockAlerts());
     return out;
   }
 }

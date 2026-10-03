@@ -21,6 +21,13 @@ export const CAPITAL = K([
   'CANCELACION PRESTAMO', 'CANCELACION DE PRESTAMO', 'COMPRAVENTA', 'ARRAS',
 ]);
 
+/** Money moved to or from your broker or investment products: it is still yours (neither spending nor income). */
+export const INVESTMENT = K([
+  'DEGIRO', 'TRADE REPUBLIC', 'INTERACTIVE BROKERS', 'INDEXA CAPITAL', 'FINIZENS', 'ETORO', 'XTB', 'SCALABLE CAPITAL', 'RENTA 4',
+  'COMPRA VALORES', 'COMPRA DE VALORES', 'VENTA VALORES', 'VENTA DE VALORES', 'ORDEN DE VALORES', 'OPERACION DE VALORES', 'OPERACION VALORES',
+  'SUSCRIPCION FONDO', 'SUSCRIPCION FONDOS', 'SUSCRIPCION DE FONDOS', 'REEMBOLSO FONDO', 'REEMBOLSO FONDOS', 'REEMBOLSO DE FONDOS',
+]);
+
 /** Transfers and Bizum with other people: spending (out) or money received (in) unless they turn out to be yours. */
 export const PERSON_TRANSFER = K(['TRANSFERENCIA', 'TRANSFERENCIAS', 'TRANSF', 'TRANSFER', 'BIZUM', 'ENVIO DE DINERO', 'ORDEN DE PAGO']);
 /** Incoming transfer from a company (payroll, expenses paid by the employer…). */
@@ -53,6 +60,8 @@ export function inferTransactionType(descriptionNormalized: string, amountCents:
   const t = descriptionNormalized;
   const capital = hasKeyword(t, CAPITAL);
   if (capital && amountCents !== 0) return { type: 'transfer', reason: `Operación patrimonial («${capital}»): no es gasto ni ingreso` };
+  const investment = hasKeyword(t, INVESTMENT);
+  if (investment && amountCents !== 0) return { type: 'transfer', reason: `Inversión («${investment}»): el dinero sigue siendo tuyo, no es gasto ni ingreso` };
   if (amountCents < 0) {
     // Fees first: "COMISION RET. EFECTIVO" is a fee, not a withdrawal.
     let k = hasKeyword(t, FEE);

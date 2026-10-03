@@ -7,6 +7,17 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '0.5.0',
+    date: '2026-10-03',
+    items: [
+      'Nueva sección «Bolsa»: sigue acciones y ETF y recibe avisos cuando se cumplen reglas de compra (corrección dentro de una tendencia alcista, cruce dorado, precio objetivo). Antes de comprar comprueba que tu fondo de emergencia está cubierto y te indica un importe máximo orientativo.',
+      'Registra tus compras y ventas: rentabilidad real en euros (tipo de cambio y comisiones incluidos), método FIFO, IRPF estimado, regla de los dos meses y avisos de venta (stop-loss, stop dinámico, objetivo de beneficio, pérdida de tendencia). Tú decides los porcentajes.',
+      'Tu cartera de bolsa suma en «Patrimonio». Las transferencias a brókers y las compras de valores o fondos ya no cuentan como gasto.',
+      'Cada cuenta comprueba que su saldo calculado cuadra con el saldo final de cada extracto importado y avisa si falta o sobra algún movimiento.',
+      'Solo se envía a internet el símbolo de cada valor (con los datos de mercado activados); tus operaciones no salen de tu equipo. Las señales son reglas técnicas, no asesoramiento financiero.',
+    ],
+  },
+  {
     version: '0.4.2',
     date: '2026-09-30',
     items: [

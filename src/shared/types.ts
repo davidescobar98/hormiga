@@ -358,6 +358,8 @@ export interface AppSettings {
   lock: { enabled: boolean; windowsHello: boolean; autoLockMinutes: number };
   /** Count the principal part of loan payments as savings (debt repaid) instead of spending. */
   principalAsSavings: boolean;
+  /** Rules for stock signals (Bolsa). */
+  stocks: StockRulesSettings;
 }
 
 export interface LockStatus {
@@ -832,7 +834,7 @@ export interface BudgetsOverview {
   suggestions: { categoryId: number; name: string; averageCents: Cents; suggestedCents: Cents; kind: CategoryKind }[];
 }
 
-export type AlertKind = 'budget' | 'unusual_charge' | 'duplicate_charge' | 'price_increase' | 'upcoming_payment' | 'transfer_review' | 'sync';
+export type AlertKind = 'budget' | 'unusual_charge' | 'duplicate_charge' | 'price_increase' | 'upcoming_payment' | 'transfer_review' | 'sync' | 'stock_buy' | 'stock_sell';
 
 export interface AlertDTO {
   key: string;
@@ -872,6 +874,11 @@ export interface AccountDTO {
   /** Money in / out over the last 30 days (internal transfers included). */
   last30InCents: Cents;
   last30OutCents: Cents;
+  /**
+   * Check of the calculated balance against the closing balance printed on each imported statement: any difference
+   * means a missing, duplicated or wrong movement.
+   */
+  reconciliation: { checked: number; mismatches: { date: IsoDate; statementCents: Cents; calculatedCents: Cents }[] };
 }
 
 export interface ExtraordinaryMovement {
@@ -1120,4 +1127,168 @@ export interface WealthOverview {
   accountsTotalCents: Cents;
   /** Accounts whose balance is still unknown (the user has to enter it once). */
   accountsWithoutBalance: number;
+  /** Your stock portfolio from «Bolsa» (included in the totals), or null when you have none. */
+  stocksPortfolio: { valueCents: Cents; costCents: Cents } | null;
+  /** You also have a manual asset of type «Acciones»: it may be counted twice. */
+  stocksMaybeDuplicated: boolean;
+}
+
+// ───────── Stocks (Bolsa) ─────────
+
+export interface StockRulesSettings {
+  stopLossPct: number;
+  trailingStopPct: number;
+  takeProfitPct: number;
+  dipPct: number;
+  maxPositionPct: number;
+  /** Raise alerts (and Windows notifications if enabled) when a buy or sell signal starts. */
+  notify: boolean;
+}
+
+export type StockSignalSide = 'buy' | 'sell';
+
+export interface StockSignalDTO {
+  kind: string;
+  side: StockSignalSide;
+  strength: 'strong' | 'moderate' | 'weak';
+  title: string;
+  detail: string;
+  /** Date the signal started (first seen by Hormiga). */
+  since: string | null;
+}
+
+export interface StockQuoteInfo {
+  symbol: string;
+  name: string;
+  currency: string | null;
+  exchange: string | null;
+  lastPrice: number | null;
+  lastDate: string | null;
+  /** True when the last price is more than 5 days old. */
+  stale: boolean;
+  sma50: number | null;
+  sma200: number | null;
+  rsi14: number | null;
+  high52w: number | null;
+  drawdownBp: number | null;
+  change1yBp: number | null;
+  /** Last ~6 months of closes, for a small chart. */
+  sparkline: number[];
+}
+
+export interface WatchItemDTO extends StockQuoteInfo {
+  targetPrice: number | null;
+  held: boolean;
+  signals: StockSignalDTO[];
+  warnings: string[];
+}
+
+export interface PositionDTO extends StockQuoteInfo {
+  shares: number;
+  avgPriceNative: number;
+  firstBuyDate: string;
+  costCents: Cents;
+  valueCents: Cents | null;
+  gainCents: Cents | null;
+  gainBp: number | null;
+  weightBp: number | null;
+  /** Units of the stock's currency per 1 € used for the value (null for euros). */
+  fxPerEur: number | null;
+  /** Spanish tax on the gain if you sold everything today (marginal, with this year's realised gains). */
+  estimatedTaxCents: Cents | null;
+  signals: StockSignalDTO[];
+  warnings: string[];
+}
+
+export interface StockTradeDTO {
+  id: number;
+  symbol: string;
+  name: string;
+  side: StockSignalSide;
+  date: string;
+  quantity: number;
+  price: number;
+  currency: string;
+  fxPerEur: number;
+  feesCents: Cents;
+  /** Euros paid (buy, fees included) or received (sell, fees deducted). */
+  totalCents: Cents;
+  note: string | null;
+}
+
+export interface StockTradeInput {
+  symbol: string;
+  side: StockSignalSide;
+  date: string;
+  quantity: number;
+  price: number;
+  currency: string;
+  /** Units of `currency` per 1 €; null = use the cached rate for that date. */
+  fxPerEur: number | null;
+  feesCents: number;
+  note: string | null;
+}
+
+export interface RealizedSaleDTO {
+  tradeId: number;
+  symbol: string;
+  name: string;
+  date: string;
+  quantity: number;
+  proceedsCents: Cents;
+  costCents: Cents;
+  gainCents: Cents;
+  washSale: boolean;
+}
+
+export interface RealizedYearDTO {
+  year: number;
+  gainsCents: Cents;
+  lossesCents: Cents;
+  /** Gains minus computable losses (losses deferred by the two-month rule are left out). */
+  netCents: Cents;
+  deferredLossCents: Cents;
+  /** Savings-scale tax on the net (only these sales; other savings income is not known). */
+  estimatedTaxCents: Cents;
+  sales: RealizedSaleDTO[];
+}
+
+export interface StocksOverview {
+  marketEnabled: boolean;
+  source: string | null;
+  lastRefreshAt: string | null;
+  rules: StockRulesSettings;
+  liquidity: {
+    liquidCents: Cents | null;
+    emergencyTargetCents: Cents | null;
+    surplusCents: Cents | null;
+    /** Rule of thumb: maximum for one new position with your weight limit. */
+    maxNewPositionCents: Cents | null;
+    note: string;
+    ok: boolean;
+  };
+  portfolio: {
+    valueCents: Cents;
+    costCents: Cents;
+    gainCents: Cents;
+    gainBp: number | null;
+    pricedPositions: number;
+    positions: number;
+    /** Tax if you sold every priced position today (gains and losses offset, with this year's realised result). */
+    estimatedTaxCents: Cents;
+    /** Net result of this year's sales (computable losses only). */
+    realizedThisYearCents: Cents;
+    /** Diversification hint when there are too few positions for your weight limit. */
+    note: string | null;
+  };
+  positions: PositionDTO[];
+  watchlist: WatchItemDTO[];
+  trades: StockTradeDTO[];
+  realized: RealizedYearDTO[];
+}
+
+export interface StocksRefreshResult {
+  updated: number;
+  failed: { symbol: string; message: string }[];
+  overview: StocksOverview;
 }

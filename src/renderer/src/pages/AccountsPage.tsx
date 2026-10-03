@@ -88,6 +88,16 @@ export function AccountsPage({ initialSection }: { initialSection?: string }) {
                   {a.movementsCount} movimientos{a.lastDate ? ` · último ${formatDate(a.lastDate)}` : ''}
                   {(a.last30InCents > 0 || a.last30OutCents > 0) && <> · 30 días: +{formatCents(a.last30InCents)} / −{formatCents(a.last30OutCents)}</>}
                 </div>
+                {a.reconciliation.checked > 0 && a.reconciliation.mismatches.length === 0 && (
+                  <div className="small" style={{ marginTop: 4 }}><Badge tone="positive" title="El saldo calculado coincide con el saldo final impreso en cada extracto importado">Cuadra con {a.reconciliation.checked === 1 ? '1 extracto' : `${a.reconciliation.checked} extractos`}</Badge></div>
+                )}
+                {a.reconciliation.mismatches.length > 0 && (
+                  <Callout tone="warning">
+                    El saldo calculado no coincide con el del extracto{a.reconciliation.mismatches.length > 1 ? ` en ${a.reconciliation.mismatches.length} fechas` : ''}:{' '}
+                    {a.reconciliation.mismatches.slice(-3).map((m) => `${formatDate(m.date)}: extracto ${formatCents(m.statementCents)}, calculado ${formatCents(m.calculatedCents)} (diferencia ${formatCents(m.calculatedCents - m.statementCents, { signed: true })})`).join(' · ')}.
+                    {' '}Suele deberse a un movimiento que falta o está duplicado en esas fechas.
+                  </Callout>
+                )}
                 <div className="row" style={{ marginTop: 10, gap: 4, flexWrap: 'wrap' }}>
                   {a.movementsCount > 0 && <button className="btn sm" onClick={() => navigate('transactions', { accountId: a.id })}>Ver movimientos</button>}
                   {a.sourceKind !== 'card' && a.balanceCents !== null && <button className="btn sm ghost" onClick={() => setBalanceOf(a)}>Corregir saldo</button>}

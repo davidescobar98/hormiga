@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   syncIntervalHours: 6,
   lock: { enabled: false, windowsHello: false, autoLockMinutes: 15 },
   principalAsSavings: true,
+  stocks: { stopLossPct: 15, trailingStopPct: 20, takeProfitPct: 30, dipPct: 10, maxPositionPct: 20, notify: true },
 };
 
 /** Non-secret key/value settings stored as JSON. Secrets (OAuth tokens) never go here. */
@@ -75,6 +76,7 @@ export class SettingsRepo {
       profile: { ...DEFAULT_PROFILE, ...(stored.profile ?? {}) },
       notifications: { ...DEFAULT_SETTINGS.notifications, ...(stored.notifications ?? {}) },
       lock: { ...DEFAULT_SETTINGS.lock, ...(stored.lock ?? {}) },
+      stocks: { ...DEFAULT_SETTINGS.stocks, ...(stored.stocks ?? {}) },
     };
   }
 
@@ -87,6 +89,7 @@ export class SettingsRepo {
       profile: { ...current.profile, ...(patch.profile ?? {}) },
       notifications: { ...current.notifications, ...(patch.notifications ?? {}) },
       lock: { ...current.lock, ...(patch.lock ?? {}) },
+      stocks: { ...current.stocks, ...(patch.stocks ?? {}) },
     };
     this.setRaw('app', next);
     return next;

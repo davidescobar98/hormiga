@@ -32,6 +32,10 @@ accede a la web de BBVA.
 - **Metas de ahorro** con fecha y aportaciones, **fondo de emergencia** (meses de gasto esencial cubiertos),
   **patrimonio** (activos, inversiones y deudas con valoraciones periódicas, rentabilidad sobre lo aportado) y
   **simulador** de interés compuesto con tus supuestos. Sin recomendaciones de productos.
+- **Bolsa**: lista de seguimiento con señales de compra explicables (corrección en tendencia alcista, cruce dorado,
+  precio objetivo), cartera con tus operaciones (FIFO, euros con el tipo de cambio de cada operación, comisiones), señales
+  de venta (stop-loss, stop dinámico, objetivo de beneficio, pérdida de tendencia), IRPF estimado y regla de los dos meses.
+  Avisos al empezar cada señal. Solo se envía el símbolo; no es asesoramiento financiero. Ver [docs/stocks.md](docs/stocks.md).
 - **Ingestión**: Gmail (OAuth 2.0 + PKCE, solo lectura) con detección configurable de emails BBVA, revisión previa a la
   importación inicial, sincronización manual y automática al abrir, recuperación de pendientes tras semanas cerrada,
   tolerancia a fallos parciales. Importación manual de **PDF y CSV** (sin necesidad de Gmail).
@@ -216,6 +220,8 @@ Más detalle en [docs/security.md](docs/security.md).
 
 ## Documentación técnica
 
+- [docs/stocks.md](docs/stocks.md) — Bolsa: indicadores, señales, FIFO, impuestos y avisos.
+- [docs/mobile.md](docs/mobile.md) — plan para iOS y Android.
 - [docs/budgets-alerts-lock.md](docs/budgets-alerts-lock.md) — presupuestos, avisos, sincronización periódica, bloqueo y operaciones patrimoniales.
 - [docs/accounts-and-transfers.md](docs/accounts-and-transfers.md) — cuentas y saldos, transferencias, perfil y ahorro ampliado.
 - [docs/architecture.md](docs/architecture.md) — capas, contrato IPC, modelo de datos.

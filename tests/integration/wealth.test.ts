@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeCore } from '../helpers/core';
 import { Database } from '../../src/core/db/database';
-import { MIGRATIONS } from '../../src/core/db/migrations';
+import { LATEST_SCHEMA_VERSION, MIGRATIONS } from '../../src/core/db/migrations';
 import { loanStatus } from '../../src/core/domain/loans';
 import type { MarketProvider } from '../../src/core/market/yahoo';
 
@@ -148,7 +148,7 @@ describe('savings pots, emergency fund and wealth (service level)', () => {
     });
     db.run("INSERT INTO assets(name, type, created_at, updated_at) VALUES ('Fondo', 'fund', 'now', 'now')");
     db.migrate();
-    expect(db.schemaVersion).toBe(5);
+    expect(db.schemaVersion).toBe(LATEST_SCHEMA_VERSION);
     expect(db.get<{ valuation_mode: string; annual_rate_bp: number | null }>('SELECT valuation_mode, annual_rate_bp FROM assets')).toEqual({ valuation_mode: 'manual', annual_rate_bp: null });
   });
 
@@ -160,7 +160,7 @@ describe('savings pots, emergency fund and wealth (service level)', () => {
     });
     db.run("INSERT INTO settings(key, value, updated_at) VALUES ('x', '1', 'now')");
     db.migrate();
-    expect(db.schemaVersion).toBe(5);
+    expect(db.schemaVersion).toBe(LATEST_SCHEMA_VERSION);
     expect(db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'x'")!.value).toBe('1');
     expect(db.get("SELECT name FROM sqlite_master WHERE name = 'savings_pots'")).toBeDefined();
   });

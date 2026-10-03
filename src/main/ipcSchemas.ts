@@ -11,6 +11,7 @@ const text = (max: number) => z.string().max(max);
 const none = z.undefined().or(z.null()).optional();
 const txType = z.enum(TRANSACTION_TYPES);
 const kind = z.enum(CATEGORY_KINDS);
+const symbol = z.string().regex(/^[A-Za-z0-9.\-=^]{1,24}$/, 'Símbolo no válido');
 
 const detection = z.object({
   senderDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/, 'Dominio no válido')).max(30),
@@ -34,6 +35,14 @@ const settingsPatch = z.object({
   notifications: z.object({ enabled: z.boolean() }).strict(),
   syncIntervalHours: z.number().int().min(0).max(48),
   principalAsSavings: z.boolean(),
+  stocks: z.object({
+    stopLossPct: z.number().min(1).max(90),
+    trailingStopPct: z.number().min(1).max(90),
+    takeProfitPct: z.number().min(1).max(1000),
+    dipPct: z.number().min(1).max(90),
+    maxPositionPct: z.number().min(1).max(100),
+    notify: z.boolean(),
+  }).partial().strict(),
   profile: z.object({
     ownerNames: z.array(z.string().trim().min(3).max(80)).max(5),
     household: z.enum(HOUSEHOLDS).nullable(),
@@ -214,6 +223,23 @@ export const IPC_SCHEMAS: Record<Channel, z.ZodType> = {
   'wealth.earlyRepayment': z.object({ assetId: id, date: isoDate, amountCents: cents.min(1), strategy: z.enum(['reduce_term', 'reduce_payment']) }).strict(),
   'market.search': z.object({ query: text(60).trim().min(2) }).strict(),
   'market.returns': z.object({ symbol: z.string().regex(/^[A-Za-z0-9.\-=^]{1,24}$/) }).strict(),
+  'stocks.overview': none,
+  'stocks.refresh': z.object({ force: z.boolean().optional() }).strict().optional().nullable(),
+  'stocks.addWatch': z.object({ symbol }).strict(),
+  'stocks.removeWatch': z.object({ symbol }).strict(),
+  'stocks.setTarget': z.object({ symbol, targetPrice: z.number().positive().max(1e9).nullable() }).strict(),
+  'stocks.addTrade': z.object({
+    symbol,
+    side: z.enum(['buy', 'sell']),
+    date: isoDate,
+    quantity: z.number().positive().max(1e9),
+    price: z.number().positive().max(1e9),
+    currency: z.string().regex(/^[A-Za-z]{3}$/, 'Moneda de 3 letras (EUR, USD…)'),
+    fxPerEur: z.number().positive().max(1e6).nullable(),
+    feesCents: cents.min(0),
+    note: text(200).nullable(),
+  }).strict(),
+  'stocks.deleteTrade': z.object({ id }).strict(),
   'wealth.deleteAsset': z.object({ id }).strict(),
   'wealth.valuations': z.object({ assetId: id }).strict(),
   'wealth.saveValuation': z.object({ assetId: id, date: isoDate, valueCents: cents.min(0), contributedCents: cents.min(0).nullable(), note: text(200).nullable() }).strict(),

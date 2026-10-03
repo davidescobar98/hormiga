@@ -439,6 +439,29 @@ export function createHandlers(rt: Runtime, getWindow: () => BrowserWindow | nul
     'wealth.earlyRepayment': ({ assetId, date, amountCents, strategy }) => c().wealth.earlyRepayment(assetId, date, amountCents, strategy),
     'market.search': ({ query }) => c().wealth.marketSearch(query),
     'market.returns': ({ symbol }) => c().wealth.marketReturns(symbol),
+    'stocks.overview': () => c().stocks.overview(),
+    'stocks.refresh': async (input) => {
+      const r = await c().stocks.refresh(input?.force ?? false);
+      onAlertsChanged();
+      return r;
+    },
+    'stocks.addWatch': async ({ symbol }) => {
+      const r = await c().stocks.addWatch(symbol);
+      onAlertsChanged();
+      return r;
+    },
+    'stocks.removeWatch': ({ symbol }) => c().stocks.removeWatch(symbol),
+    'stocks.setTarget': ({ symbol, targetPrice }) => {
+      const r = c().stocks.setTarget(symbol, targetPrice);
+      onAlertsChanged();
+      return r;
+    },
+    'stocks.addTrade': (input) => {
+      const r = c().stocks.addTrade(input);
+      onAlertsChanged();
+      return r;
+    },
+    'stocks.deleteTrade': ({ id }) => c().stocks.deleteTrade(id),
     'wealth.deleteValuation': ({ id }) => {
       const r = { deleted: c().repos.assets.deleteValuation(id) };
       emitChanged('wealth');

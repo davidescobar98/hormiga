@@ -7,6 +7,7 @@ import type {
   WealthOverview, AssetInput, AssetDTO, ValuationDTO, ValuationInput, LoanScheduleRow, EarlyRepaymentDTO, MarketQuoteDTO, MarketReturnsDTO, UpdateStatus,
   AccountDTO, AccountUpdate, ManualAccountInput, CounterpartySummary, CounterpartyDecisionInput,
   BudgetsOverview, AlertDTO, LockStatus, LockConfigInput, ExtraordinaryMovement,
+  StocksOverview, StocksRefreshResult, StockTradeInput,
 } from './types';
 import type { YearMonth } from './dates';
 
@@ -129,6 +130,14 @@ export interface ApiMap {
   'wealth.earlyRepayment': { input: { assetId: number; date: string; amountCents: number; strategy: 'reduce_term' | 'reduce_payment' }; output: EarlyRepaymentDTO };
   'market.search': { input: { query: string }; output: MarketQuoteDTO[] };
   'market.returns': { input: { symbol: string }; output: MarketReturnsDTO };
+
+  'stocks.overview': { input: Void; output: StocksOverview };
+  'stocks.refresh': { input: { force?: boolean } | Void; output: StocksRefreshResult };
+  'stocks.addWatch': { input: { symbol: string }; output: StocksOverview };
+  'stocks.removeWatch': { input: { symbol: string }; output: StocksOverview };
+  'stocks.setTarget': { input: { symbol: string; targetPrice: number | null }; output: StocksOverview };
+  'stocks.addTrade': { input: StockTradeInput; output: StocksOverview };
+  'stocks.deleteTrade': { input: { id: number }; output: StocksOverview };
 
   'shell.openHelp': { input: { topic: HelpTopic }; output: { opened: boolean } };
 }

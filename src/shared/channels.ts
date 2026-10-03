@@ -28,6 +28,7 @@ export const CHANNELS = [
   'pots.overview', 'pots.save', 'pots.delete', 'pots.movements', 'pots.addMovement', 'pots.deleteMovement',
   'wealth.overview', 'wealth.saveAsset', 'wealth.deleteAsset', 'wealth.valuations', 'wealth.saveValuation', 'wealth.deleteValuation',
   'wealth.loanSchedule', 'wealth.earlyRepayment', 'market.search', 'market.returns',
+  'stocks.overview', 'stocks.refresh', 'stocks.addWatch', 'stocks.removeWatch', 'stocks.setTarget', 'stocks.addTrade', 'stocks.deleteTrade',
   'shell.openHelp',
 ] as const satisfies readonly Channel[];
 
