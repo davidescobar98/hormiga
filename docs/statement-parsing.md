@@ -73,6 +73,17 @@ Todo lo específico de BBVA está en la constante `BBVA_FORMAT`:
 - Tipo de documento: *cuenta* si hay columna de saldo o menciones de cuenta; si no, *tarjeta*. En tarjeta los cargos
   van en positivo (`charges_positive`); en cuenta, en negativo.
 
+## CaixaBankNow (`src/core/parsing/caixaNowParser.ts`)
+
+PDF de la página de movimientos de la banca digital (impresa o guardada como PDF). Validado con el diseño de un
+documento real (ningún dato en el repositorio; el test usa una réplica ficticia en `tests/integration/caixaNow.test.ts`).
+
+- Cabecera: contador de página `n/N`, titular e IBAN (`ESkk 2100…`; se guardan los 4 últimos dígitos como pista de
+  cuenta), `Periodo dd/mm/aaaa - dd/mm/aaaa  Saldo disponible` (periodo del documento) y `Concepto  Fecha  Importe Saldo`.
+- Una línea por movimiento, el más reciente primero: `<concepto>  dd/mm/aaaa  ±importe€  saldo€`. El separador de
+  miles solo aparece a partir de 10.000 (`-1234,56€`, `+12.345,67€`).
+- Todas las filas llevan saldo: la cadena de saldos se verifica fila a fila; si no cuadra, el documento va a revisión.
+
 ## Normalización y validación (`normalize.ts`)
 
 - Convención interna: `amountCents` entero, **positivo = entra dinero, negativo = sale**.

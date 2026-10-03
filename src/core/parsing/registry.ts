@@ -2,6 +2,7 @@ import { AppError } from '../errors';
 import { BbvaStatementParser } from './bbvaParser';
 import { BbvaAccountStatementParser } from './bbvaAccountParser';
 import { BbvaWebMovementsParser } from './bbvaWebParser';
+import { CaixaBankNowParser } from './caixaNowParser';
 import { csvToDocument } from './csvParser';
 import { GenericPdfStatementParser } from './genericPdfParser';
 import { isNorma43, Norma43Parser } from './norma43Parser';
@@ -12,6 +13,7 @@ import type { ExtractedDocument, StatementParser } from './types';
 
 export const DEFAULT_PARSERS: StatementParser[] = [
   new BbvaWebMovementsParser(),
+  new CaixaBankNowParser(),
   new BbvaAccountStatementParser(),
   new BbvaStatementParser(),
   new Norma43Parser(),
@@ -30,7 +32,7 @@ export function selectParser(doc: ExtractedDocument, parsers: StatementParser[] 
   if (!best || best.score < MIN_PARSER_CONFIDENCE) {
     throw new AppError(
       'UNKNOWN_FORMAT',
-      `«${doc.fileName}» no se reconoce como un extracto compatible: PDF de movimientos con fechas e importes, Excel/CSV de movimientos (CaixaBank, imagin, Sabadell, Santander, ING, BBVA…) o Norma 43.`,
+      `«${doc.fileName}» no se reconoce como un extracto compatible: PDF de movimientos con fechas e importes (BBVA, CaixaBankNow…), Excel/CSV de movimientos (CaixaBank, imagin, Sabadell, Santander, ING, BBVA, N26, Revolut…) o Norma 43.`,
     );
   }
   return best.p;

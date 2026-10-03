@@ -413,6 +413,48 @@ export class ImportService {
     return { removedTransactions: removed };
   }
 
+  /**
+   * Deletes an account with everything imported into it (its documents and their movements). Manual accounts are
+   * simply removed; demo accounts are removed with the demo data. Transfers to it lose their destination.
+   */
+  async deleteAccount(accountId: number): Promise<{ removedTransactions: number; removedDocuments: number }> {
+    const account = this.repos.accounts.get(accountId);
+    if (account.name.endsWith(' (demo)')) {
+      throw new AppError('VALIDATION', 'Es una cuenta de los datos de demostración: quítala con «Eliminar datos de demostración» (Ajustes → Privacidad y datos) o desde el botón de esta cuenta.');
+    }
+    if (account.sourceKind === 'manual') {
+      this.repos.accounts.delete(accountId);
+      this.accounts?.refreshTransfers();
+      this.afterChange();
+      return { removedTransactions: 0, removedDocuments: 0 };
+    }
+    const docIds = this.repos.db
+      .all<{ id: number }>(
+        `SELECT document_id AS id FROM transactions WHERE account_id = ? AND document_id IS NOT NULL
+         UNION SELECT document_id AS id FROM statements WHERE account_id = ? AND document_id IS NOT NULL`,
+        accountId, accountId,
+      )
+      .map((r) => r.id);
+    let removedTransactions = 0;
+    for (const id of docIds) {
+      const doc = this.repos.documents.get(id);
+      const stored = this.repos.documents.storedPath(id);
+      removedTransactions += doc.txCount;
+      this.repos.db.transaction(() => this.repos.documents.delete(id));
+      if (stored) await this.store.remove(stored).catch(() => undefined);
+    }
+    this.repos.db.transaction(() => {
+      // Movements of this account without a document (none today, but never leave orphans behind).
+      removedTransactions += this.repos.db.run('DELETE FROM transactions WHERE account_id = ?', accountId).changes;
+      this.repos.db.run('DELETE FROM accounts WHERE id = ?', accountId);
+      this.repos.accounts.pruneEmpty();
+    });
+    this.accounts?.refreshTransfers();
+    this.afterChange();
+    this.log.info('import.account_deleted', { accountId, documents: docIds.length });
+    return { removedTransactions, removedDocuments: docIds.length };
+  }
+
   async deleteRetainedDocuments(): Promise<{ deleted: number }> {
     let deleted = 0;
     for (const d of this.repos.documents.allStoredPaths()) {

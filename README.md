@@ -40,7 +40,7 @@ accede a la web de BBVA.
   inicio con Windows y punto rojo en la barra de tareas.
 - **Comprobar mis números**: auditoría de consistencia (identidad de ahorro, suma de categorías, signos, saldos frente a
   extractos, cuadros de amortización, presupuestos, duplicados, reglas demasiado generales).
-- **Otros bancos**: importa el Excel de movimientos de **CaixaBank, imagin, Sabadell, Santander, Openbank, ING,
+- **Otros bancos**: importa el PDF de movimientos de **CaixaBankNow**, el Excel de movimientos de **CaixaBank, imagin, Sabadell, Santander, Openbank, ING,
   Bankinter y BBVA** (incluidos los «.xls» que en realidad son tablas HTML), los CSV de **N26** y **Revolut**, cualquier
   CSV con fecha/concepto/importe y ficheros
   **Norma 43** (AEB). Detecta el banco y verifica los saldos fila a fila cuando el fichero los trae.

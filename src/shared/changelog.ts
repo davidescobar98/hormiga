@@ -7,6 +7,14 @@ export interface ReleaseNotes {
 
 export const CHANGELOG: ReleaseNotes[] = [
   {
+    version: '1.1.0',
+    date: '2026-10-03',
+    items: [
+      'Nuevo: importa el PDF de movimientos de CaixaBankNow (la página de movimientos guardada o impresa como PDF desde la banca digital). Cada fila se comprueba con su saldo: si falta o sobra algún movimiento, el documento pasa a revisión en lugar de importarse.',
+      'Ahora puedes eliminar cualquier cuenta desde «Cuentas → Editar», por ejemplo para cambiar tu cuenta nómina por otra: se borran sus movimientos y documentos importados, y puedes volver a importarla cuando quieras. Las cuentas de demostración se quitan con un clic desde ahí mismo.',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-10-03',
     items: [

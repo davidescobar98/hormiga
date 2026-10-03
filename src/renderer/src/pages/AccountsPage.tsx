@@ -167,15 +167,26 @@ function EditAccountDialog({ account, onClose }: { account: AccountDTO; onClose:
       setError(toApiError(err).message);
     }
   };
+  const isDemo = account.name.endsWith(' (demo)');
   const remove = async () => {
-    if (!confirm(`¿Eliminar la cuenta manual «${account.name}»? Tus transferencias hacia ella volverán a quedar sin destino.`)) return;
-    await api('accounts.deleteManual', { id: account.id });
-    toast({ tone: 'info', message: 'Cuenta eliminada.' });
-    invalidate();
-    onClose();
+    const question = isDemo
+      ? '¿Eliminar los datos de demostración? Se borran todas las cuentas y movimientos de ejemplo; lo que hayas importado tú se queda.'
+      : account.sourceKind === 'manual'
+        ? `¿Eliminar la cuenta manual «${account.name}»? Tus transferencias hacia ella volverán a quedar sin destino.`
+        : `¿Eliminar la cuenta «${account.name}» con sus ${account.movementsCount} movimientos y los documentos importados en ella? No se puede deshacer (salvo con una copia de seguridad). Podrás volver a importarla cuando quieras.`;
+    if (!confirm(question)) return;
+    try {
+      if (isDemo) await api('data.removeDemo');
+      else await api('accounts.deleteManual', { id: account.id });
+      toast({ tone: 'info', message: isDemo ? 'Datos de demostración eliminados.' : 'Cuenta eliminada.' });
+      invalidate();
+      onClose();
+    } catch (err) {
+      setError(toApiError(err).message);
+    }
   };
   return (
-    <Dialog open title="Editar cuenta" onClose={onClose} footer={<>{account.sourceKind === 'manual' && <button className="btn danger" onClick={remove}>Eliminar</button>}<button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
+    <Dialog open title="Editar cuenta" onClose={onClose} footer={<><button className="btn danger" onClick={() => void remove()}>{isDemo ? 'Eliminar datos de demostración' : 'Eliminar cuenta'}</button><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
       <div className="form-row">
         <Field label="Nombre" htmlFor="ea-name"><input id="ea-name" className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Tipo" htmlFor="ea-kind">

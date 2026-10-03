@@ -455,8 +455,9 @@ export function createHandlers(
       refreshAfterDataChange();
       return c().accounts.list();
     },
-    'accounts.deleteManual': ({ id }) => {
-      c().accounts.deleteManual(id);
+    // Any account: manual ones are removed; imported ones with their documents and movements.
+    'accounts.deleteManual': async ({ id }) => {
+      await c().importer.deleteAccount(id);
       refreshAfterDataChange();
       return c().accounts.list();
     },
